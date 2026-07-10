@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated / runtime artifacts (recreated by dataset.py / train.py)
+data/
+checkpoints/
+logs/
+tokenizer/
+
+# Model weights
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Jupyter / Colab
+.ipynb_checkpoints/
+*.ipynb
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Metrics plots (regenerated each run)
+logs/
