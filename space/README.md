@@ -1,6 +1,6 @@
 ---
 title: Lattice Mini
-emoji: ◇
+emoji: 🧠
 colorFrom: indigo
 colorTo: blue
 sdk: gradio
