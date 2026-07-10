@@ -1,9 +1,9 @@
 # Google Colab setup
 
-Train the ~148M-parameter GPT (Lattice Standard) on a free T4 GPU. Colab wipes all
+Train **Lattice Air** (~148M params) on a free T4 GPU. Colab wipes all
 files when the runtime disconnects — **download `best.pt` before you close the tab**.
 
-Checkpoints are ~1.8 GB each at this size (vs ~510 MB for the old 42M model).
+Checkpoints are ~1.8 GB each (vs ~510 MB for Lattice Mini).
 
 ## Before you start
 

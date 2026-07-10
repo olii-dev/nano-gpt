@@ -130,10 +130,15 @@ class ModelConfig:
     """
     GPT-style decoder-only transformer.
 
-    Default preset — **Lattice Standard** (~148M params):
+    Product line (Lattice Systems):
+        Lattice Mini  —  42M   (edge / demo)
+        Lattice Air   — 148M   (default preset below)
+        Lattice Pro   —  12B+  (future)
+
+    Default preset — **Lattice Air** (~148M params):
         vocab=8000, n_layer=20, n_embd=768, n_head=12, block_size=512
 
-    Previous **Lattice Mini** (~42M):
+    **Lattice Mini** (~42M):
         n_layer=12, n_embd=512, n_head=8
 
     Scaling guide (32 GB unified memory, MPS):
@@ -178,7 +183,7 @@ class TrainConfig:
 
     # Optimization
     # use_amp: CUDA-only mixed precision (autocast). Forced off on MPS/CPU.
-    # Lattice Standard (~148M) needs smaller micro-batches on T4 / M4.
+    # Lattice Air (~148M) needs smaller micro-batches on T4 / M4.
     # Effective batch = batch_size * grad_accum_steps = 32.
     batch_size: int = 4
     grad_accum_steps: int = 8
@@ -277,12 +282,12 @@ def lattice_mini_config() -> ModelConfig:
     return ModelConfig(n_layer=12, n_embd=512, n_head=8)
 
 
-def lattice_standard_config() -> ModelConfig:
-    """~148M param preset (Lattice Standard)."""
+def lattice_air_config() -> ModelConfig:
+    """~148M param preset (Lattice Air)."""
     return ModelConfig(n_layer=20, n_embd=768, n_head=12)
 
 
-model_config = lattice_standard_config()
+model_config = lattice_air_config()
 train_config = TrainConfig()
 generate_config = GenerateConfig()
 finetune_config = FinetuneConfig()
