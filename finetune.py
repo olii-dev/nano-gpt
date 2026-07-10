@@ -376,19 +376,36 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Instruction-tune a base checkpoint")
     p.add_argument("--base", type=Path, default=finetune_config.base_checkpoint)
     p.add_argument("--output", type=Path, default=finetune_config.output_checkpoint)
+    p.add_argument(
+        "--continue",
+        action="store_true",
+        help="Continue from checkpoints/chat_best.pt (1200 extra steps, lower LR)",
+    )
     p.add_argument("--max-iters", type=int, default=None)
     p.add_argument("--max-examples", type=int, default=None)
+    p.add_argument("--lr", type=float, default=None, help="Learning rate override")
     p.add_argument("--device", choices=["auto", "cuda", "mps", "cpu"], default="auto")
     args = p.parse_args()
 
     cfg = finetune_config
-    cfg.base_checkpoint = args.base
+    if args.continue:
+        cfg.base_checkpoint = cfg.continue_checkpoint
+        cfg.max_iters = cfg.continue_iters
+        cfg.lr_decay_iters = cfg.continue_iters
+        cfg.warmup_iters = 25
+        cfg.learning_rate = cfg.continue_lr
+        print(f"Continue mode: {cfg.continue_iters} steps from {cfg.continue_checkpoint}")
+    else:
+        cfg.base_checkpoint = args.base
     cfg.output_checkpoint = args.output
     cfg.device_prefer = args.device  # type: ignore[assignment]
     if args.max_iters is not None:
         cfg.max_iters = args.max_iters
+        cfg.lr_decay_iters = args.max_iters
     if args.max_examples is not None:
         cfg.max_examples = args.max_examples
+    if args.lr is not None:
+        cfg.learning_rate = args.lr
 
     finetune(cfg)
 

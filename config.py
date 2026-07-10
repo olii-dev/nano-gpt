@@ -226,13 +226,16 @@ class FinetuneConfig:
     """
     Instruction fine-tuning on top of a base checkpoint.
 
-    Uses a trimmed Alpaca subset (~5k examples). 800 steps at effective batch
-    16 ≈ 2–3 passes over the data — enough to learn the chat template without
-    washing out WikiText knowledge.  Expect ~15–30 min on Colab T4.
+    Uses a trimmed Alpaca subset (~5k examples).
+    Fresh run: 1600 steps (~30–45 min on Colab T4).
+    Continue: --continue adds 1200 more steps from chat_best.pt.
     """
 
     base_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "best.pt")
     output_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "chat_best.pt")
+    continue_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "chat_best.pt")
+    continue_iters: int = 1200
+    continue_lr: float = 2e-5
 
     # Alpaca JSON from Stanford (instruction / input / output fields)
     alpaca_url: str = (
@@ -251,9 +254,9 @@ class FinetuneConfig:
     beta1: float = 0.9
     beta2: float = 0.95
     grad_clip: float = 1.0
-    max_iters: int = 800
+    max_iters: int = 1600
     warmup_iters: int = 50
-    lr_decay_iters: int = 800
+    lr_decay_iters: int = 1600
     min_lr: float = 5e-6
 
     eval_interval: int = 50
