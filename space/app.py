@@ -88,9 +88,6 @@ demo = gr.ChatInterface(
         "Write a short poem about the ocean.",
         "Explain gravity in simple terms.",
     ],
-    retry_btn=None,
-    undo_btn=None,
-    clear_btn="Clear",
 )
 
 if __name__ == "__main__":
