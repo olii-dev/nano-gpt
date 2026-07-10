@@ -56,48 +56,42 @@ else:
         return _generate(message, temperature, max_new_tokens, "cpu")
 
 
-DISCLAIMER = """
+DESCRIPTION = """
 **Lattice Mini** by **Lattice Systems** — a 42M-parameter language model built entirely from scratch.
-
-Custom tokenizer → WikiText-2 pretraining → instruction fine-tuning on Alpaca.
 
 This is a **research demo**, not a production assistant. Expect repetition, wrong facts, and odd phrasing.
 Try **temperature 0.3–0.5** for slightly more focused replies.
 """
 
 
-def respond(
+def chat(
     message: str,
-    history: list[tuple[str, str]],
+    history: list,
     temperature: float,
     max_new_tokens: float,
-) -> tuple[list[tuple[str, str]], str]:
-    if not message.strip():
-        return history, ""
-
-    completion = generate_reply(message.strip(), temperature, max_new_tokens)
-    history = history or []
-    history.append((message.strip(), completion))
-    return history, ""
+) -> str:
+    if not message or not message.strip():
+        return ""
+    return generate_reply(message.strip(), float(temperature), float(max_new_tokens))
 
 
-with gr.Blocks(title="Lattice Mini") as demo:
-    gr.Markdown("# Lattice Mini")
-    gr.Markdown("*by Lattice Systems*")
-    gr.Markdown(DISCLAIMER)
-
-    chatbot = gr.Chatbot(label="Chat", height=400)
-    msg = gr.Textbox(label="Your message", placeholder="Ask Lattice Mini something...")
-    with gr.Row():
-        temperature = gr.Slider(0.1, 1.0, value=0.4, step=0.05, label="Temperature")
-        max_new_tokens = gr.Slider(20, 120, value=60, step=5, label="Max new tokens")
-    clear = gr.ClearButton([msg, chatbot])
-
-    msg.submit(
-        respond,
-        inputs=[msg, chatbot, temperature, max_new_tokens],
-        outputs=[chatbot, msg],
-    )
+demo = gr.ChatInterface(
+    fn=chat,
+    title="Lattice Mini",
+    description=DESCRIPTION,
+    additional_inputs=[
+        gr.Slider(0.1, 1.0, value=0.4, step=0.05, label="Temperature"),
+        gr.Slider(20, 120, value=60, step=5, label="Max new tokens"),
+    ],
+    examples=[
+        "What is the capital of France?",
+        "Write a short poem about the ocean.",
+        "Explain gravity in simple terms.",
+    ],
+    retry_btn=None,
+    undo_btn=None,
+    clear_btn="Clear",
+)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.queue().launch()
