@@ -129,6 +129,31 @@ def save_checkpoint(
     print(f"  Checkpoint saved → {path}")
 
 
+def maybe_save_best(
+    val_loss: float,
+    best_val_loss: float,
+    checkpoint_path: Path,
+    model: GPT,
+    optimizer: torch.optim.Optimizer,
+    iter_num: int,
+    mcfg: ModelConfig,
+    tcfg: TrainConfig,
+) -> float:
+    """
+    Save best.pt only when val loss improves.
+
+    Returns the updated best_val_loss. Periodic and final eval both use this
+    so training can run to max_iters without overwriting the best checkpoint.
+    """
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        save_checkpoint(
+            checkpoint_path, model, optimizer, iter_num, best_val_loss, mcfg, tcfg,
+        )
+        print(f"  ★ New best val loss: {val_loss:.4f}")
+    return best_val_loss
+
+
 def find_latest_checkpoint(checkpoint_dir: Path) -> Path | None:
     ckpts = sorted(checkpoint_dir.glob("ckpt_*.pt"), key=lambda p: p.stat().st_mtime)
     return ckpts[-1] if ckpts else None
@@ -308,12 +333,11 @@ def train(
                 "lr": get_lr(iter_num, tcfg),
                 "tokens_seen": iter_num * tokens_per_iter,
             })
-            if losses["val"] < best_val_loss:
-                best_val_loss = losses["val"]
-                save_checkpoint(
-                    tcfg.checkpoint_dir / "best.pt",
-                    model, optimizer, iter_num, best_val_loss, mcfg, tcfg,
-                )
+            best_val_loss = maybe_save_best(
+                losses["val"], best_val_loss,
+                tcfg.checkpoint_dir / "best.pt",
+                model, optimizer, iter_num, mcfg, tcfg,
+            )
 
         # LR for this step
         lr = get_lr(iter_num, tcfg)
@@ -382,12 +406,14 @@ def train(
             f"\nFinal eval | train loss {losses['train']:.4f} | "
             f"val loss {losses['val']:.4f} | val ppl {val_ppl:.2f}"
         )
-        if losses["val"] < best_val_loss:
-            best_val_loss = losses["val"]
-        save_checkpoint(
+        prev_best = best_val_loss
+        best_val_loss = maybe_save_best(
+            losses["val"], best_val_loss,
             tcfg.checkpoint_dir / "best.pt",
-            model, optimizer, iter_num, best_val_loss, mcfg, tcfg,
+            model, optimizer, iter_num, mcfg, tcfg,
         )
+        if losses["val"] >= prev_best:
+            print(f"  best.pt unchanged (best val loss: {best_val_loss:.4f} from earlier step)")
 
     final_path = tcfg.checkpoint_dir / f"ckpt_{iter_num}.pt"
     save_checkpoint(final_path, model, optimizer, iter_num, best_val_loss, mcfg, tcfg)
@@ -411,12 +437,16 @@ def main() -> None:
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to checkpoint, or 'latest'")
     parser.add_argument("--max-iters", type=int, default=None)
+    parser.add_argument("--dataset", choices=["wikitext2", "tiny_shakespeare"], default=None,
+                        help="Training corpus (default: config train_config.dataset_name)")
     parser.add_argument("--device", choices=["auto", "cuda", "mps", "cpu"], default="auto")
     parser.add_argument("--no-amp", action="store_true",
                         help="Disable CUDA mixed precision even on GPU")
     args = parser.parse_args()
 
     tcfg = train_config
+    if args.dataset is not None:
+        tcfg.dataset_name = args.dataset
     tcfg.device_prefer = args.device  # type: ignore[assignment]
     if args.no_amp:
         tcfg.use_amp = False

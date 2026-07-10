@@ -3,7 +3,11 @@ Dataset download, preprocessing, and batching for language-model training.
 
 Supported corpora (add more in DATASET_REGISTRY):
   - tiny_shakespeare  — Karpathy's 1 MB Shakespeare plays (fast iteration)
-  - wikitext2         — clean Wikipedia articles (~4 MB) — stub for later
+  - wikitext2         — clean Wikipedia articles (~13 MB raw, ~2M+ train tokens)
+
+Select via config (`train_config.dataset_name`) or CLI:
+  python dataset.py --dataset wikitext2
+  python train.py --dataset wikitext2
 
 Pipeline:
   1. Download raw text → data/raw/
@@ -24,7 +28,14 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from config import DATA_DIR, TOKENIZER_DIR, ModelConfig, TrainConfig, model_config, train_config
+from config import (
+    DATA_DIR,
+    ModelConfig,
+    TrainConfig,
+    model_config,
+    tokenizer_dir_for,
+    train_config,
+)
 from tokenizer import load_tokenizer, train_tokenizer
 
 
@@ -36,6 +47,15 @@ TINY_SHAKESPEARE_URL = (
     "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
 )
 
+# WikiText-2 raw splits — official S3 bucket is often unreachable; cosmo.zip mirrors it.
+WIKITEXT2_RAW_BASE = "https://cosmo.zip/pub/datasets/wikitext-2-raw"
+WIKITEXT2_URLS = [
+    f"{WIKITEXT2_RAW_BASE}/wiki.train.raw",
+    f"{WIKITEXT2_RAW_BASE}/wiki.valid.raw",
+    f"{WIKITEXT2_RAW_BASE}/wiki.test.raw",
+]
+WIKITEXT2_ZIP_URL = "https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-2-raw-v1.zip"
+
 DATASET_REGISTRY: dict[str, dict] = {
     "tiny_shakespeare": {
         "url": TINY_SHAKESPEARE_URL,
@@ -43,9 +63,9 @@ DATASET_REGISTRY: dict[str, dict] = {
         "description": "Shakespeare plays (~1 MB) — great first training run",
     },
     "wikitext2": {
-        "url": None,  # TODO: add when scaling up
+        "url": None,  # multi-file download via WIKITEXT2_URLS
         "filename": "wikitext2.txt",
-        "description": "Wikipedia articles — use after pipeline is proven",
+        "description": "Wikipedia articles (~13 MB raw) — better for 42M-param models",
     },
 }
 
@@ -85,6 +105,42 @@ def _download_url(url: str, out_path: Path) -> None:
         )
 
 
+def _download_wikitext2(out_path: Path) -> None:
+    """Download WikiText-2 train/valid/test raw files and concatenate."""
+    parts: list[str] = []
+    try:
+        for url in WIKITEXT2_URLS:
+            split_name = url.rsplit("/", 1)[-1]
+            print(f"  Downloading {split_name} ...")
+            tmp = out_path.parent / f"_tmp_{split_name}"
+            _download_url(url, tmp)
+            parts.append(tmp.read_text(encoding="utf-8"))
+            tmp.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"  Split download failed ({e}), trying zip fallback ...")
+        parts = _download_wikitext2_from_zip(out_path.parent)
+
+    out_path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def _download_wikitext2_from_zip(raw_dir: Path) -> list[str]:
+    """Fallback: download official zip and extract train/valid/test raw files."""
+    import zipfile
+
+    zip_path = raw_dir / "wikitext-2-raw-v1.zip"
+    _download_url(WIKITEXT2_ZIP_URL, zip_path)
+    parts: list[str] = []
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in (
+            "wikitext-2-raw/wiki.train.raw",
+            "wikitext-2-raw/wiki.valid.raw",
+            "wikitext-2-raw/wiki.test.raw",
+        ):
+            parts.append(zf.read(member).decode("utf-8"))
+    zip_path.unlink(missing_ok=True)
+    return parts
+
+
 def download_dataset(name: str, data_dir: Path = DATA_DIR) -> Path:
     """Download a registered dataset if the raw file isn't already on disk."""
     if name not in DATASET_REGISTRY:
@@ -100,6 +156,13 @@ def download_dataset(name: str, data_dir: Path = DATA_DIR) -> Path:
         return out_path
 
     url = meta["url"]
+    if url is None and name == "wikitext2":
+        print(f"Downloading {name} (train + valid + test splits) ...")
+        _download_wikitext2(out_path)
+        size_kb = out_path.stat().st_size / 1024
+        print(f"Saved {out_path} ({size_kb:.1f} KB)")
+        return out_path
+
     if url is None:
         raise NotImplementedError(
             f"Download for {name!r} not implemented yet. "
@@ -133,7 +196,7 @@ def _encode_corpus(text: str, tokenizer) -> list[int]:
 
 def _ensure_tokenizer(
     train_text: str,
-    tokenizer_dir: Path = TOKENIZER_DIR,
+    tokenizer_dir: Path,
     vocab_size: int = model_config.vocab_size,
 ) -> tuple:
     """Train tokenizer if missing; return (tokenizer, actual_vocab_size)."""
@@ -157,7 +220,7 @@ def prepare_dataset(
     train_ratio: float = train_config.train_split_ratio,
     vocab_size: int = model_config.vocab_size,
     data_dir: Path = DATA_DIR,
-    tokenizer_dir: Path = TOKENIZER_DIR,
+    tokenizer_dir: Path | None = None,
     seed: int = train_config.seed,
 ) -> PreparedData:
     """
@@ -165,7 +228,12 @@ def prepare_dataset(
 
     Train/val split is done at the character level before tokenization so both
     splits share the same BPE vocabulary (trained only on the train portion).
+
+    Tokenizer is stored per dataset: tokenizer/<dataset_name>/tokenizer.json
     """
+    if tokenizer_dir is None:
+        tokenizer_dir = tokenizer_dir_for(name)
+
     raw_path = download_dataset(name, data_dir)
     text = _read_text(raw_path)
 

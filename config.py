@@ -114,6 +114,13 @@ for _d in (DATA_DIR, CHECKPOINT_DIR, TOKENIZER_DIR, LOG_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
+def tokenizer_dir_for(dataset_name: str) -> Path:
+    """Per-dataset tokenizer path so switching corpora doesn't reuse a stale vocab."""
+    d = TOKENIZER_DIR / dataset_name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Model & training hyperparameters
 # ---------------------------------------------------------------------------
@@ -160,8 +167,9 @@ class ModelConfig:
 class TrainConfig:
     """Training loop settings."""
 
-    # Data
-    dataset_name: str = "tiny_shakespeare"   # see dataset.py for options
+    # Data — select corpus via dataset_name or CLI --dataset
+    # Options: "wikitext2" (default), "tiny_shakespeare"
+    dataset_name: str = "wikitext2"
     train_split_ratio: float = 0.9
     val_split_ratio: float = 0.1
 
@@ -175,18 +183,21 @@ class TrainConfig:
     beta1: float = 0.9
     beta2: float = 0.95
     grad_clip: float = 1.0
-    max_iters: int = 3000            # enough for ~1 MB Tiny Shakespeare
+    # WikiText-2 has ~2M+ train tokens (~8× Tiny Shakespeare). 10k steps gives
+    # the model enough exposure to learn before overfitting while eval every 100
+    # steps catches the val-loss minimum. Use --max-iters 3000 for tiny_shakespeare.
+    max_iters: int = 10000
 
     # Schedule (cosine with warmup)
-    warmup_iters: int = 100
-    lr_decay_iters: int = 3000
+    warmup_iters: int = 200
+    lr_decay_iters: int = 10000
     min_lr: float = 3e-5
 
     # Logging & checkpointing
-    eval_interval: int = 250
+    eval_interval: int = 100         # finer val-loss curve to spot overfitting
     eval_iters: int = 50
     log_interval: int = 10
-    save_interval: int = 500
+    save_interval: int = 1000
 
     # Reproducibility
     seed: int = 1337

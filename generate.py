@@ -24,7 +24,7 @@ from pathlib import Path
 
 import torch
 
-from config import ModelConfig, generate_config, get_device
+from config import ModelConfig, generate_config, get_device, tokenizer_dir_for
 from model import GPT
 from tokenizer import decode, encode, load_tokenizer
 
@@ -81,9 +81,12 @@ class LMEngine:
         self.model.to(self.device)
         self.model.eval()
 
-        # Tokenizer
-        tok_path = tokenizer_path or Path(__file__).parent / "tokenizer" / "tokenizer.json"
-        self.tokenizer = load_tokenizer(tok_path)
+        # Tokenizer — per-dataset path from checkpoint metadata
+        if tokenizer_path is None:
+            tcfg_dict = state.get("train_config") or {}
+            dataset = tcfg_dict.get("dataset_name", "wikitext2")
+            tokenizer_path = tokenizer_dir_for(dataset) / "tokenizer.json"
+        self.tokenizer = load_tokenizer(tokenizer_path)
 
         self.checkpoint_path = checkpoint_path
         print(

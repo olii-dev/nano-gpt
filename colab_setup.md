@@ -61,16 +61,18 @@ You should see `cuda (Tesla T4)` (or similar) as the selected device.
 
 ### Cell 5 — Download data + train tokenizer
 
+WikiText-2 is the default. For Tiny Shakespeare, add `--dataset tiny_shakespeare`.
+
 ```python
-!python dataset.py
+!python dataset.py --dataset wikitext2
 ```
 
 ---
 
-### Cell 6 — Train (~1–2 hours on T4 with AMP)
+### Cell 6 — Train (~2–3 hours on T4 with AMP, 10k steps)
 
 ```python
-!python train.py --device cuda
+!python train.py --device cuda --dataset wikitext2
 ```
 
 `--device cuda` is optional on Colab (`auto` picks CUDA anyway). Mixed
@@ -102,7 +104,7 @@ files.download("checkpoints/best.pt")
 Optional: download the tokenizer and loss plot too.
 
 ```python
-files.download("tokenizer/tokenizer.json")
+files.download("tokenizer/wikitext2/tokenizer.json")
 files.download("logs/loss_curve.png")
 ```
 
