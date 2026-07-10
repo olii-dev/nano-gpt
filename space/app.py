@@ -1,20 +1,60 @@
 """
 Lattice Mini — Gradio demo for Hugging Face Spaces.
 
-Loads the instruction-tuned checkpoint once at startup and serves a chat UI.
+Works on CPU Basic (default) and ZeroGPU (requires @spaces.GPU).
 """
 
 from __future__ import annotations
 
 import gradio as gr
 
-from generate import LMEngine
-
 CHECKPOINT = "checkpoints/chat_best.pt"
 
-print("Loading Lattice Mini (42M params — ~10–20s on CPU)...")
-engine = LMEngine(CHECKPOINT, device="cpu")
-print("Lattice Mini ready.")
+try:
+    import spaces
+
+    ZERO_GPU = True
+except ImportError:
+    ZERO_GPU = False
+
+engine = None
+
+
+def _get_engine(device: str):
+    global engine
+    from generate import LMEngine
+
+    if engine is None:
+        print(f"Loading Lattice Mini on {device}...")
+        engine = LMEngine(CHECKPOINT, device=device)
+        print("Lattice Mini ready.")
+    return engine
+
+
+def _generate(message: str, temperature: float, max_new_tokens: float, device: str) -> str:
+    eng = _get_engine(device)
+    result = eng.generate(
+        message.strip(),
+        max_new_tokens=int(max_new_tokens),
+        temperature=float(temperature),
+        top_k=40,
+        top_p=0.9,
+    )
+    return result.completion
+
+
+if ZERO_GPU:
+    @spaces.GPU(duration=120)
+    def generate_reply(message: str, temperature: float, max_new_tokens: float) -> str:
+        return _generate(message, temperature, max_new_tokens, "cuda")
+
+    print("ZeroGPU mode — model loads on first message.")
+else:
+    _get_engine("cpu")
+
+    def generate_reply(message: str, temperature: float, max_new_tokens: float) -> str:
+        return _generate(message, temperature, max_new_tokens, "cpu")
+
 
 DISCLAIMER = """
 **Lattice Mini** by **Lattice Systems** — a 42M-parameter language model built entirely from scratch.
@@ -35,15 +75,9 @@ def respond(
     if not message.strip():
         return history, ""
 
-    result = engine.generate(
-        message.strip(),
-        max_new_tokens=int(max_new_tokens),
-        temperature=float(temperature),
-        top_k=40,
-        top_p=0.9,
-    )
+    completion = generate_reply(message.strip(), temperature, max_new_tokens)
     history = history or []
-    history.append((message.strip(), result.completion))
+    history.append((message.strip(), completion))
     return history, ""
 
 
