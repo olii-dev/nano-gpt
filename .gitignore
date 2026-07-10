@@ -38,3 +38,12 @@ tokenizer/
 
 # Metrics plots (regenerated each run)
 logs/
+
+# HF Space — setup_from_repo.sh copies these; only track deploy source files
+space/checkpoints/
+space/tokenizer/
+space/model.py
+space/config.py
+space/generate.py
+space/instruct_format.py
+space/tokenizer.py
