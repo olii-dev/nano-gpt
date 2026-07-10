@@ -84,9 +84,9 @@ demo = gr.ChatInterface(
         gr.Slider(20, 120, value=60, step=5, label="Max new tokens"),
     ],
     examples=[
-        "What is the capital of France?",
-        "Write a short poem about the ocean.",
-        "Explain gravity in simple terms.",
+        ["What is the capital of France?", 0.4, 60],
+        ["Write a short poem about the ocean.", 0.4, 60],
+        ["Explain gravity in simple terms.", 0.4, 60],
     ],
 )
 
