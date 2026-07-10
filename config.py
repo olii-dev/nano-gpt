@@ -130,24 +130,27 @@ class ModelConfig:
     """
     GPT-style decoder-only transformer.
 
-  Target: ~25–50M parameters.  Current defaults land around ~42M:
-      vocab=8000, n_layer=12, n_embd=512, n_head=8, block_size=512
+    Default preset — **Lattice Standard** (~148M params):
+        vocab=8000, n_layer=20, n_embd=768, n_head=12, block_size=512
 
-  Scaling guide (32 GB unified memory, MPS):
-    - More layers / wider embeddings: linear-ish VRAM growth (~4 * n_embd^2
-      per block for attention + FFN weights).
-    - Longer context (block_size): grows position embeddings and attention
-      activations as O(block_size^2) per layer during training.
-    - Rough ceiling on M4 32GB with float32: ~200–350M params at 512 context
-      if batch_size=1–4; beyond that you'll need gradient checkpointing,
-      shorter context, or CPU offloading.  1B+ is impractical without
-      quantization and/or multi-machine training.
+    Previous **Lattice Mini** (~42M):
+        n_layer=12, n_embd=512, n_head=8
+
+    Scaling guide (32 GB unified memory, MPS):
+        - More layers / wider embeddings: linear-ish VRAM growth (~4 * n_embd^2
+          per block for attention + FFN weights).
+        - Longer context (block_size): grows position embeddings and attention
+          activations as O(block_size^2) per layer during training.
+        - Rough ceiling on M4 32GB with float32: ~200–350M params at 512 context
+          if batch_size=1–4; beyond that you'll need gradient checkpointing,
+          shorter context, or CPU offloading.  1B+ is impractical without
+          quantization and/or multi-machine training.
     """
 
     vocab_size: int = 8000
-    n_layer: int = 12
-    n_embd: int = 512
-    n_head: int = 8
+    n_layer: int = 20
+    n_embd: int = 768
+    n_head: int = 12
     block_size: int = 512          # max context length (tokens)
     dropout: float = 0.1
     bias: bool = False             # False matches modern GPT-2/3 style
@@ -175,8 +178,10 @@ class TrainConfig:
 
     # Optimization
     # use_amp: CUDA-only mixed precision (autocast). Forced off on MPS/CPU.
-    batch_size: int = 8
-    grad_accum_steps: int = 4        # effective batch = 32
+    # Lattice Standard (~148M) needs smaller micro-batches on T4 / M4.
+    # Effective batch = batch_size * grad_accum_steps = 32.
+    batch_size: int = 4
+    grad_accum_steps: int = 8
     use_amp: bool = True
     learning_rate: float = 3e-4
     weight_decay: float = 0.1
@@ -267,7 +272,17 @@ class FinetuneConfig:
 
 
 # Default singletons — import these or build your own
-model_config = ModelConfig()
+def lattice_mini_config() -> ModelConfig:
+    """42M param preset (original Lattice Mini)."""
+    return ModelConfig(n_layer=12, n_embd=512, n_head=8)
+
+
+def lattice_standard_config() -> ModelConfig:
+    """~148M param preset (Lattice Standard)."""
+    return ModelConfig(n_layer=20, n_embd=768, n_head=12)
+
+
+model_config = lattice_standard_config()
 train_config = TrainConfig()
 generate_config = GenerateConfig()
 finetune_config = FinetuneConfig()
