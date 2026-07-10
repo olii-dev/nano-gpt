@@ -86,26 +86,43 @@ precision is enabled automatically on CUDA.
 
 ---
 
-### Cell 7 — Quick generation test
+### Cell 7 — Instruction fine-tune for chat (~15–30 min on T4)
+
+Teaches the base model to answer in `### Instruction / ### Response` format.
 
 ```python
-!python generate.py --checkpoint checkpoints/best.pt --prompt "ROMEO:" --max-new-tokens 120
+!python finetune.py --device cuda --base checkpoints/best.pt
+```
+
+Quick smoke test (~5 min):
+
+```python
+!python finetune.py --device cuda --max-iters 100 --max-examples 1000
 ```
 
 ---
 
-### Cell 8 — Download checkpoint (do this before disconnecting!)
+### Cell 8 — Test chat model
+
+```python
+!python generate.py --checkpoint checkpoints/chat_best.pt --chat
+```
+
+Base model (Wikipedia continuation) still works with `--base`:
+
+```python
+!python generate.py -c checkpoints/best.pt --base --prompt "The city is located in"
+```
+
+---
+
+### Cell 9 — Download checkpoints (before disconnecting!)
 
 ```python
 from google.colab import files
+files.download("checkpoints/chat_best.pt")
 files.download("checkpoints/best.pt")
-```
-
-Optional: download the tokenizer and loss plot too.
-
-```python
 files.download("tokenizer/wikitext2/tokenizer.json")
-files.download("logs/loss_curve.png")
 ```
 
 ---

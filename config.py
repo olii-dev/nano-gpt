@@ -221,10 +221,53 @@ class GenerateConfig:
     seed: int | None = None
 
 
+@dataclass
+class FinetuneConfig:
+    """
+    Instruction fine-tuning on top of a base checkpoint.
+
+    Uses a trimmed Alpaca subset (~5k examples). 800 steps at effective batch
+    16 ≈ 2–3 passes over the data — enough to learn the chat template without
+    washing out WikiText knowledge.  Expect ~15–30 min on Colab T4.
+    """
+
+    base_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "best.pt")
+    output_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "chat_best.pt")
+
+    # Alpaca JSON from Stanford (instruction / input / output fields)
+    alpaca_url: str = (
+        "https://raw.githubusercontent.com/tatsu-lab/stanford_alpaca/main/alpaca_data.json"
+    )
+    max_examples: int = 5000          # subset — full 52k is overkill for 42M params
+    val_ratio: float = 0.05
+    max_seq_len: int = 512            # truncate long examples
+
+    # Gentler than base training (3e-4) to avoid catastrophic forgetting
+    batch_size: int = 4
+    grad_accum_steps: int = 4         # effective batch = 16
+    use_amp: bool = True
+    learning_rate: float = 5e-5
+    weight_decay: float = 0.01
+    beta1: float = 0.9
+    beta2: float = 0.95
+    grad_clip: float = 1.0
+    max_iters: int = 800
+    warmup_iters: int = 50
+    lr_decay_iters: int = 800
+    min_lr: float = 5e-6
+
+    eval_interval: int = 50
+    eval_iters: int = 20
+    log_interval: int = 10
+    seed: int = 1337
+    device_prefer: DevicePrefer = "auto"
+
+
 # Default singletons — import these or build your own
 model_config = ModelConfig()
 train_config = TrainConfig()
 generate_config = GenerateConfig()
+finetune_config = FinetuneConfig()
 
 
 def save_config(path: Path, **configs) -> None:
