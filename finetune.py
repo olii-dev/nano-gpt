@@ -377,7 +377,7 @@ def main() -> None:
     p.add_argument("--base", type=Path, default=finetune_config.base_checkpoint)
     p.add_argument("--output", type=Path, default=finetune_config.output_checkpoint)
     p.add_argument(
-        "--continue",
+        "--resume",
         action="store_true",
         help="Continue from checkpoints/chat_best.pt (1200 extra steps, lower LR)",
     )
@@ -388,13 +388,13 @@ def main() -> None:
     args = p.parse_args()
 
     cfg = finetune_config
-    if args.continue:
+    if args.resume:
         cfg.base_checkpoint = cfg.continue_checkpoint
         cfg.max_iters = cfg.continue_iters
         cfg.lr_decay_iters = cfg.continue_iters
         cfg.warmup_iters = 25
         cfg.learning_rate = cfg.continue_lr
-        print(f"Continue mode: {cfg.continue_iters} steps from {cfg.continue_checkpoint}")
+        print(f"Resume mode: {cfg.continue_iters} steps from {cfg.continue_checkpoint}")
     else:
         cfg.base_checkpoint = args.base
     cfg.output_checkpoint = args.output

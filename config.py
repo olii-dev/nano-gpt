@@ -228,7 +228,7 @@ class FinetuneConfig:
 
     Uses a trimmed Alpaca subset (~5k examples).
     Fresh run: 1600 steps (~30–45 min on Colab T4).
-    Continue: --continue adds 1200 more steps from chat_best.pt.
+    Continue: --resume adds 1200 more steps from chat_best.pt.
     """
 
     base_checkpoint: Path = field(default_factory=lambda: CHECKPOINT_DIR / "best.pt")
