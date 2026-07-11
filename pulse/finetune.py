@@ -118,6 +118,9 @@ def finetune(cfg: PulseFinetuneConfig, device: str = "auto") -> Path:
         dataset_kwargs={"skip_prepare_dataset": False},
     )
 
+    def _chat_format(example: dict) -> str:
+        return tokenizer.apply_chat_template(example["messages"], tokenize=False)
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
@@ -125,7 +128,7 @@ def finetune(cfg: PulseFinetuneConfig, device: str = "auto") -> Path:
         eval_dataset=val_ds,
         processing_class=tokenizer,
         peft_config=peft_config,
-        max_seq_length=cfg.max_seq_length,
+        formatting_func=_chat_format,
     )
 
     print("\n--- Training ---")
