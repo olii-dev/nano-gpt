@@ -12,7 +12,7 @@ from datasets import Dataset, load_dataset
 
 from pulse.config import ALPACA_URL, DATA_DIR, SYSTEM_PROMPT
 
-DatasetSource = Literal["smol-smoltalk", "alpaca", "mix", "lattice-identity"]
+DatasetSource = Literal["smol-smoltalk", "alpaca", "mix", "lattice-identity", "identity-mix"]
 
 
 def _download_alpaca(path: Path) -> list[dict]:
@@ -148,6 +148,16 @@ def build_sft_dataset(
         repeats = 20
         rows = custom_rows * repeats
         print(f"  Identity-only mode: {len(custom_rows)} examples × {repeats} = {len(rows)}")
+    elif dataset_source == "identity-mix":
+        if not custom_rows:
+            raise ValueError("identity-mix requires pulse/data/lattice_custom.json")
+        repeats = 8
+        rows = custom_rows * repeats
+        rows.extend(_load_smoltalk_rows(2000, seed))
+        random.Random(seed).shuffle(rows)
+        print(
+            f"  Identity-mix: {len(custom_rows)}×{repeats} identity + 2000 smoltalk = {len(rows)}"
+        )
     else:
         raise ValueError(f"Unknown dataset_source: {dataset_source}")
 

@@ -201,9 +201,9 @@ def main() -> None:
     p.add_argument("--max-examples", type=int, default=None)
     p.add_argument(
         "--dataset",
-        choices=["smol-smoltalk", "alpaca", "mix", "lattice-identity"],
+        choices=["smol-smoltalk", "alpaca", "mix", "lattice-identity", "identity-mix"],
         default=None,
-        help="Training data (default: smol-smoltalk). Use lattice-identity for branding boost.",
+        help="Training data. Use identity-mix for v1.2 (branding + general chat).",
     )
     p.add_argument(
         "--base-model",
@@ -211,6 +211,7 @@ def main() -> None:
         help="HF id or local path (default: SmolLM2). Use pulse/output/lattice-pulse for v1.1 identity boost.",
     )
     p.add_argument("--no-lora", action="store_true", help="Full fine-tune (needs more VRAM)")
+    p.add_argument("--learning-rate", type=float, default=None, dest="learning_rate")
     p.add_argument("--output", type=Path, default=None)
     args = p.parse_args()
 
@@ -230,6 +231,8 @@ def main() -> None:
         cfg.output_dir = args.output
     if args.base_model is not None:
         cfg.base_model = args.base_model
+    if args.learning_rate is not None:
+        cfg.learning_rate = args.learning_rate
 
     finetune(cfg, device=args.device)
 

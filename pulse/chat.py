@@ -33,28 +33,34 @@ def generate(
     tokenizer,
     device: str,
     user: str,
+    history: list[dict[str, str]] | None = None,
     system: str = SYSTEM_PROMPT,
-    max_new_tokens: int = 200,
-    temperature: float = 0.7,
+    max_new_tokens: int = 72,
+    temperature: float = 0.45,
+    repetition_penalty: float = 1.22,
+    greedy: bool = False,
 ) -> str:
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user})
+
     text = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True,
     )
     inputs = tokenizer(text, return_tensors="pt").to(device)
     with torch.no_grad():
-        out = model.generate(
-            **inputs,
+        gen_kw: dict = dict(
             max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=temperature,
-            top_p=0.9,
-            repetition_penalty=1.1,
             pad_token_id=tokenizer.eos_token_id,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=2,
         )
+        if greedy:
+            gen_kw["do_sample"] = False
+        else:
+            gen_kw.update(do_sample=True, temperature=temperature, top_p=0.88)
+        out = model.generate(**inputs, **gen_kw)
     new_tokens = out[0, inputs["input_ids"].shape[1]:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
@@ -63,6 +69,9 @@ def chat_loop(model, tokenizer, device: str, **gen_kw) -> None:
     print("=" * 60)
     print("Lattice Pulse chat  (quit to exit)")
     print("=" * 60)
+    history: list[dict[str, str]] = []
+    max_history_turns = 6
+
     while True:
         try:
             user = input("\nYou: ").strip()
@@ -72,8 +81,14 @@ def chat_loop(model, tokenizer, device: str, **gen_kw) -> None:
         if not user or user.lower() in ("quit", "exit", "q"):
             print("Bye!")
             break
-        reply = generate(model, tokenizer, device, user, **gen_kw)
+
+        reply = generate(model, tokenizer, device, user, history=history, **gen_kw)
         print(f"\nPulse: {reply}")
+
+        history.append({"role": "user", "content": user})
+        history.append({"role": "assistant", "content": reply})
+        if len(history) > max_history_turns * 2:
+            history = history[-max_history_turns * 2 :]
 
 
 def main() -> None:
@@ -85,7 +100,8 @@ def main() -> None:
     )
     p.add_argument("--prompt", "-p", type=str, default=None)
     p.add_argument("--device", default="auto")
-    p.add_argument("--temperature", type=float, default=0.7)
+    p.add_argument("--temperature", type=float, default=0.45)
+    p.add_argument("--greedy", action="store_true", help="Deterministic decoding (less creative, more stable)")
     args = p.parse_args()
 
     print(f"Loading {args.model} ...")
@@ -93,9 +109,15 @@ def main() -> None:
     print(f"Ready on {device}")
 
     if args.prompt:
-        print(generate(model, tokenizer, device, args.prompt, temperature=args.temperature))
+        print(generate(
+            model, tokenizer, device, args.prompt,
+            temperature=args.temperature, greedy=args.greedy,
+        ))
     else:
-        chat_loop(model, tokenizer, device, temperature=args.temperature)
+        chat_loop(
+            model, tokenizer, device,
+            temperature=args.temperature, greedy=args.greedy,
+        )
 
 
 if __name__ == "__main__":
