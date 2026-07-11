@@ -194,6 +194,19 @@ print(tokenizer.decode(out[0], skip_special_tokens=True))
     (save_dir / "README.md").write_text(card, encoding="utf-8")
 
 
+def _align_checkpoint_steps(max_steps: int, eval_steps: int, save_steps: int) -> tuple[int, int]:
+    """load_best_model_at_end requires save_steps to be a multiple of eval_steps."""
+    target = max(10, min(eval_steps, max_steps // 3))
+    for candidate in range(target, 9, -1):
+        if max_steps % candidate == 0:
+            eval_steps = candidate
+            break
+    else:
+        eval_steps = max_steps
+    save_steps = max_steps if max_steps % eval_steps == 0 else (max_steps // eval_steps) * eval_steps
+    return eval_steps, max(eval_steps, save_steps)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Fine-tune SmolLM2 → Lattice Pulse")
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
@@ -218,8 +231,9 @@ def main() -> None:
     cfg = PulseFinetuneConfig()
     if args.max_steps is not None:
         cfg.max_steps = args.max_steps
-        cfg.save_steps = min(cfg.save_steps, args.max_steps)
-        cfg.eval_steps = min(cfg.eval_steps, max(50, args.max_steps // 4))
+        cfg.eval_steps, cfg.save_steps = _align_checkpoint_steps(
+            args.max_steps, cfg.eval_steps, cfg.save_steps,
+        )
     if args.max_examples is not None:
         cfg.max_train_examples = args.max_examples
     if args.dataset is not None:
