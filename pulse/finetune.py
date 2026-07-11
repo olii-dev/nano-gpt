@@ -11,7 +11,33 @@ Output: pulse/output/  (merged weights if merge_lora=True)
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+
+def _fix_kaggle_torchao() -> None:
+    """Kaggle preinstalls packages that break Pulse LoRA (old torchao, new trl)."""
+    if not os.path.isdir("/kaggle"):
+        return
+    subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "-y", "torchao"],
+        capture_output=True,
+        check=False,
+    )
+    subprocess.run(
+        [
+            sys.executable, "-m", "pip", "install", "-q",
+            "trl>=0.12.0,<0.13.0",
+            "transformers>=4.45.0,<5.0.0",
+            "peft>=0.13.0,<0.18.0",
+        ],
+        check=False,
+    )
+
+
+_fix_kaggle_torchao()
 
 import torch
 from peft import LoraConfig, PeftModel
@@ -88,7 +114,7 @@ def finetune(cfg: PulseFinetuneConfig, device: str = "auto") -> Path:
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        max_length=cfg.max_seq_length,
+        max_seq_length=cfg.max_seq_length,
         dataset_kwargs={"skip_prepare_dataset": False},
     )
 
@@ -99,6 +125,7 @@ def finetune(cfg: PulseFinetuneConfig, device: str = "auto") -> Path:
         eval_dataset=val_ds,
         processing_class=tokenizer,
         peft_config=peft_config,
+        max_seq_length=cfg.max_seq_length,
     )
 
     print("\n--- Training ---")
