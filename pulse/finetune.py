@@ -201,9 +201,14 @@ def main() -> None:
     p.add_argument("--max-examples", type=int, default=None)
     p.add_argument(
         "--dataset",
-        choices=["smol-smoltalk", "alpaca", "mix"],
+        choices=["smol-smoltalk", "alpaca", "mix", "lattice-identity"],
         default=None,
-        help="Training data (default: smol-smoltalk — HF's SmolLM2 instruct set)",
+        help="Training data (default: smol-smoltalk). Use lattice-identity for branding boost.",
+    )
+    p.add_argument(
+        "--base-model",
+        default=None,
+        help="HF id or local path (default: SmolLM2). Use pulse/output/lattice-pulse for v1.1 identity boost.",
     )
     p.add_argument("--no-lora", action="store_true", help="Full fine-tune (needs more VRAM)")
     p.add_argument("--output", type=Path, default=None)
@@ -223,6 +228,8 @@ def main() -> None:
         cfg.merge_lora = False
     if args.output is not None:
         cfg.output_dir = args.output
+    if args.base_model is not None:
+        cfg.base_model = args.base_model
 
     finetune(cfg, device=args.device)
 

@@ -52,6 +52,7 @@ def generate(
             do_sample=True,
             temperature=temperature,
             top_p=0.9,
+            repetition_penalty=1.1,
             pad_token_id=tokenizer.eos_token_id,
         )
     new_tokens = out[0, inputs["input_ids"].shape[1]:]
