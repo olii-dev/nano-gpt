@@ -1,5 +1,5 @@
 """
-Fine-tune SmolLM2-360M-Instruct → Lattice Pulse.
+Fine-tune Qwen2.5-1.5B-Instruct → Lattice Pulse.
 
 Usage (Kaggle / Colab / local CUDA):
   pip install -r pulse/requirements.txt
@@ -168,12 +168,12 @@ tags:
 
 Lattice Pulse is the conversational model in the **Lattice Systems** product line.
 
-We fine-tuned [{cfg.base_model}](https://huggingface.co/{cfg.base_model}) on curated
-instruction data (Alpaca + optional custom examples) for clear, helpful dialogue.
+We fine-tuned [{cfg.base_model}](https://huggingface.co/{cfg.base_model}) on
+identity-mix instruction data (Lattice branding + curated chat examples).
 
 - **Lattice Mini** — from-scratch 42M demo
-- **Lattice Pulse** — this model (fine-tuned SmolLM2-360M-Instruct)
-- Base weights: Hugging Face SmolLM2 (Apache 2.0)
+- **Lattice Pulse** — this model (fine-tuned Qwen2.5-1.5B-Instruct)
+- Base weights: Qwen2.5 (Apache 2.0)
 
 ## Usage
 
@@ -208,7 +208,7 @@ def _align_checkpoint_steps(max_steps: int, eval_steps: int, save_steps: int) ->
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Fine-tune SmolLM2 → Lattice Pulse")
+    p = argparse.ArgumentParser(description="Fine-tune instruct LM → Lattice Pulse")
     p.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     p.add_argument("--max-steps", type=int, default=None)
     p.add_argument("--max-examples", type=int, default=None)
@@ -216,12 +216,12 @@ def main() -> None:
         "--dataset",
         choices=["smol-smoltalk", "alpaca", "mix", "lattice-identity", "identity-mix"],
         default=None,
-        help="Training data. Use identity-mix for v1.2 (branding + general chat).",
+        help="Training data (default: identity-mix for Pulse 2.0).",
     )
     p.add_argument(
         "--base-model",
         default=None,
-        help="HF id or local path (default: SmolLM2). Use pulse/output/lattice-pulse for v1.1 identity boost.",
+        help="HF id or local path (default: Qwen2.5-1.5B-Instruct).",
     )
     p.add_argument("--no-lora", action="store_true", help="Full fine-tune (needs more VRAM)")
     p.add_argument("--learning-rate", type=float, default=None, dest="learning_rate")
