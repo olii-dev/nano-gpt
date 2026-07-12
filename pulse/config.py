@@ -27,7 +27,7 @@ ALPACA_URL = (
 class PulseFinetuneConfig:
     base_model: str = BASE_MODEL
     output_dir: Path = field(default_factory=lambda: OUTPUT_DIR)
-    # identity-mix = Lattice branding + general instruct chat (Pulse 2.0 default)
+    # identity-mix = Lattice branding + Stanford Alpaca instruct data (Pulse 2.0)
     dataset_source: str = "identity-mix"
     max_seq_length: int = 512
     max_train_examples: int = 10000

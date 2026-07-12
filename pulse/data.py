@@ -153,10 +153,10 @@ def build_sft_dataset(
             raise ValueError("identity-mix requires pulse/data/lattice_custom.json")
         repeats = 10
         rows = custom_rows * repeats
-        rows.extend(_load_smoltalk_rows(3000, seed))
+        rows.extend(_load_alpaca_rows(3000))
         random.Random(seed).shuffle(rows)
         print(
-            f"  Identity-mix: {len(custom_rows)}×{repeats} identity + 3000 smoltalk = {len(rows)}"
+            f"  Identity-mix: {len(custom_rows)}×{repeats} identity + 3000 alpaca = {len(rows)}"
         )
     else:
         raise ValueError(f"Unknown dataset_source: {dataset_source}")

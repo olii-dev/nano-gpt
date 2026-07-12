@@ -169,7 +169,7 @@ tags:
 Lattice Pulse is the conversational model in the **Lattice Systems** product line.
 
 We fine-tuned [{cfg.base_model}](https://huggingface.co/{cfg.base_model}) on
-identity-mix instruction data (Lattice branding + curated chat examples).
+identity-mix instruction data (Lattice branding + Stanford Alpaca).
 
 - **Lattice Mini** — from-scratch 42M demo
 - **Lattice Pulse** — this model (fine-tuned Qwen2.5-1.5B-Instruct)
