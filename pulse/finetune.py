@@ -196,15 +196,16 @@ print(tokenizer.decode(out[0], skip_special_tokens=True))
 
 def _align_checkpoint_steps(max_steps: int, eval_steps: int, save_steps: int) -> tuple[int, int]:
     """load_best_model_at_end requires save_steps to be a multiple of eval_steps."""
-    target = max(10, min(eval_steps, max_steps // 3))
-    for candidate in range(target, 9, -1):
+    target = max(25, min(eval_steps, max_steps // 5))
+    for candidate in range(target, 24, -1):
         if max_steps % candidate == 0:
             eval_steps = candidate
             break
     else:
         eval_steps = max_steps
-    save_steps = max_steps if max_steps % eval_steps == 0 else (max_steps // eval_steps) * eval_steps
-    return eval_steps, max(eval_steps, save_steps)
+    # Save every eval (not only at the end) so a dead session keeps checkpoints
+    save_steps = eval_steps
+    return eval_steps, save_steps
 
 
 def main() -> None:
