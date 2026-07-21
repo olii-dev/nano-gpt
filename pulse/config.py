@@ -10,7 +10,7 @@ OUTPUT_DIR = PULSE_ROOT / "output"
 DATA_DIR = PULSE_ROOT / "data"
 
 BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-HF_REPO_ID = "olimebberson/lattice-pulse-1.5b"
+HF_REPO_ID = "olimebberson/lattice-pulse"
 
 SYSTEM_PROMPT = (
     "You are Lattice Pulse, a helpful assistant built by Lattice Systems. "

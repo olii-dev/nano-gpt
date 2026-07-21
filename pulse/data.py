@@ -12,7 +12,67 @@ from datasets import Dataset, load_dataset
 
 from pulse.config import ALPACA_URL, DATA_DIR, SYSTEM_PROMPT
 
-DatasetSource = Literal["smol-smoltalk", "alpaca", "mix", "lattice-identity", "identity-mix"]
+DatasetSource = Literal[
+    "smol-smoltalk",
+    "alpaca",
+    "mix",
+    "lattice-identity",
+    "identity-mix",
+    "finetome-mix",  # Pulse 2: high-quality FineTome + light Lattice identity
+]
+
+
+def _sharegpt_to_messages(
+    conversations: list[dict],
+    system_prompt: str = SYSTEM_PROMPT,
+) -> dict | None:
+    """Convert ShareGPT {from,value} turns → chat messages."""
+    if not conversations:
+        return None
+    role_map = {"human": "user", "user": "user", "gpt": "assistant", "assistant": "assistant", "system": "system"}
+    msgs: list[dict] = []
+    for turn in conversations:
+        role = role_map.get((turn.get("from") or "").lower())
+        content = (turn.get("value") or "").strip()
+        if not role or not content:
+            continue
+        if role == "system":
+            continue  # replace with Lattice system prompt
+        msgs.append({"role": role, "content": content})
+    if len(msgs) < 2:
+        return None
+    if msgs[0]["role"] != "user":
+        return None
+    if msgs[-1]["role"] != "assistant":
+        return None
+    return {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            *msgs,
+        ]
+    }
+
+
+def _load_finetome_rows(
+    max_examples: int | None,
+    seed: int,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> list[dict]:
+    """mlabonne/FineTome-100k — curated multi-turn + reasoning (far better than Alpaca)."""
+    print("Loading mlabonne/FineTome-100k (high-quality SFT) ...")
+    ds = load_dataset("mlabonne/FineTome-100k", split="train")
+    ds = ds.shuffle(seed=seed)
+    if max_examples is not None:
+        n = min(max_examples, len(ds))
+        ds = ds.select(range(n))
+    rows: list[dict] = []
+    for ex in ds:
+        row = _sharegpt_to_messages(ex.get("conversations") or [], system_prompt=system_prompt)
+        if row is not None:
+            rows.append(row)
+    print(f"  Loaded {len(rows):,} FineTome conversations")
+    return rows
+
 
 
 def _download_alpaca(path: Path) -> list[dict]:
@@ -121,11 +181,23 @@ def build_sft_dataset(
     seed: int = 1337,
     custom_path: Path | None = None,
     dataset_source: DatasetSource = "smol-smoltalk",
+    identity_repeats: int = 10,
+    alpaca_examples: int = 3000,
+    system_prompt: str | None = None,
 ) -> tuple[Dataset, Dataset]:
     if custom_path is None:
         custom_path = DATA_DIR / "lattice_custom.json"
+    prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
 
-    custom_rows = load_custom_json(custom_path)
+    custom_rows: list[dict] = []
+    if custom_path.exists():
+        raw = json.loads(custom_path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            raw = raw.get("examples", [])
+        for item in raw:
+            row = alpaca_to_messages(item, system_prompt=prompt)
+            if row is not None:
+                custom_rows.append(row)
     if custom_rows:
         print(f"  Custom Lattice examples: {len(custom_rows)}")
 
@@ -145,18 +217,31 @@ def build_sft_dataset(
         if not custom_rows:
             raise ValueError("lattice-identity requires pulse/data/lattice_custom.json")
         # Repeat branding examples so identity wins over smoltalk personas
-        repeats = 20
+        repeats = identity_repeats
         rows = custom_rows * repeats
         print(f"  Identity-only mode: {len(custom_rows)} examples × {repeats} = {len(rows)}")
     elif dataset_source == "identity-mix":
         if not custom_rows:
             raise ValueError("identity-mix requires pulse/data/lattice_custom.json")
-        repeats = 10
+        repeats = identity_repeats
         rows = custom_rows * repeats
-        rows.extend(_load_alpaca_rows(3000))
+        rows.extend(_load_alpaca_rows(alpaca_examples))
         random.Random(seed).shuffle(rows)
         print(
-            f"  Identity-mix: {len(custom_rows)}×{repeats} identity + 3000 alpaca = {len(rows)}"
+            f"  Identity-mix: {len(custom_rows)}×{repeats} identity + "
+            f"{alpaca_examples} alpaca = {len(rows)}"
+        )
+    elif dataset_source == "finetome-mix":
+        if not custom_rows:
+            raise ValueError("finetome-mix requires pulse/data/lattice_custom.json")
+        repeats = identity_repeats
+        rows = custom_rows * repeats
+        budget = alpaca_examples  # reused as "quality SFT count"
+        rows.extend(_load_finetome_rows(budget, seed, system_prompt=prompt))
+        random.Random(seed).shuffle(rows)
+        print(
+            f"  FineTome-mix: {len(custom_rows)}×{repeats} identity + "
+            f"{budget} FineTome = {len(rows)}"
         )
     else:
         raise ValueError(f"Unknown dataset_source: {dataset_source}")

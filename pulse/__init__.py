@@ -1,1 +1,1 @@
-"""Lattice Pulse — fine-tuned SmolLM2 conversational model."""
+"""Lattice Pulse — conversational models from Lattice Systems (Pulse / Pulse 2)."""
