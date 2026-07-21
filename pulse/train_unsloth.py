@@ -82,6 +82,11 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
 
     cfg.adapter_dir.mkdir(parents=True, exist_ok=True)
 
+    # T4 (Kaggle) has no bf16 — use fp16. Ampere+ can use bf16.
+    use_bf16 = bool(torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+    use_fp16 = not use_bf16
+    print(f"Precision: bf16={use_bf16}  fp16={use_fp16}")
+
     sft_args = SFTConfig(
         output_dir=str(cfg.adapter_dir),
         per_device_train_batch_size=cfg.per_device_train_batch_size,
@@ -93,7 +98,8 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
         save_steps=cfg.save_steps,
         eval_strategy="steps",
         eval_steps=cfg.eval_steps,
-        bf16=True,
+        bf16=use_bf16,
+        fp16=use_fp16,
         optim="adamw_8bit",
         lr_scheduler_type="cosine",
         seed=cfg.seed,
