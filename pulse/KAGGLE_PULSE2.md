@@ -2,96 +2,94 @@
 
 Fine-tune **Qwen/Qwen3-8B** with Unsloth QLoRA → **Lattice Pulse 2**.
 
-## Training data (not Alpaca)
+## Is FineTome-100k bad?
 
-| Source | Role |
-|--------|------|
-| **[mlabonne/FineTome-100k](https://huggingface.co/datasets/mlabonne/FineTome-100k)** | High-quality multi-turn chat, reasoning, tools — Unsloth’s recommended SFT mix |
-| **Clean Lattice identity** (`lattice_custom.json` ×4) | Brand only — light so we don’t overwrite Qwen skills |
+**No — it’s one of the best open SFT mixes.** We use it on purpose (Alpaca is out).
 
-Alpaca is **out** — too weak to beat Qwen3-8B.
+Watch-outs (already handled in our script):
+- Soft LoRA + low LR (`2e-5`) so we don’t trash Qwen3-8B Instruct
+- Light Lattice identity only (×4), not identity spam
+- Qwen chat template + `enable_thinking=False`
+- **Eval gate** before shipping (≥ base on smoke tests)
 
-### Reality check
+## Can I close my Mac?
 
-Beating the base **on every benchmark** with a free-tier LoRA is hard (Qwen3-8B is already heavily post-trained). This mix is the best honest free attempt:
+**Only if you use Save Version → Save & Run All (Commit).**
 
-- Aim: **≥ base** on HellaSwag / chat smoke + **much better** identity  
-- Ship only if eval gate passes — otherwise tune data/steps, don’t publish a worse model
+| How you run | Close Mac? | What happens |
+|-------------|------------|--------------|
+| Click ▶ on cells in the editor | **No** | Session dies when the tab/browser disconnects |
+| **Save Version → Save & Run All** | **Yes** | Independent cloud job; come back later for logs + Output |
 
-## One-time Kaggle setup
+Session limit is still ~9–12 hours of GPU. Full 800 steps may need a second version later — download the adapter from Output either way.
 
-1. **Create → New Notebook**
-2. **Settings → Accelerator → GPU T4 x2** (or T4)
-3. **Internet → On**
-4. Paste the cells below
+---
 
-## Cell 1 — Install
+## What to do (background — recommended)
 
+### 1. New notebook (you said you did this)
+- Accelerator: **GPU T4 x2** (or T4)
+- Internet: **On**
+
+### 2. Put everything in cells (don’t rely on interactive ▶ only)
+
+**Cell 1**
 ```python
 !pip install -q unsloth
 !pip uninstall -y torchao 2>/dev/null; true
 ```
 
-## Cell 2 — Clone repo
-
+**Cell 2**
 ```python
 !rm -rf /kaggle/working/nano-gpt
 !git clone https://github.com/olii-dev/nano-gpt.git /kaggle/working/nano-gpt
 %cd /kaggle/working/nano-gpt
+!git log -1 --oneline
 ```
+You should see a commit message about Pulse 2 / Unsloth.
 
-Push the latest Pulse 2 files to GitHub first, or upload `pulse/data/lattice_custom.json` + `pulse/train_unsloth.py` into Inputs.
-
-## Cell 3 — Train
-
-Full run (~several hours on T4 — may need resume / multi-session):
-
+**Cell 3 — train**
 ```python
 !python -m pulse.train_unsloth --device cuda
 ```
 
-Smoke (50 steps):
-
+Optional smoke first (interactive only, then switch to full for Save Version):
 ```python
-!python -m pulse.train_unsloth --device cuda --max-steps 50
+# !python -m pulse.train_unsloth --device cuda --max-steps 50
 ```
 
-## Cell 4 — Compare vs base (must pass before shipping)
+### 3. Start the background job
+1. Top right → **Save Version**
+2. Choose **Save & Run All (Commit)**
+3. Confirm **Save**
+4. You can close the Mac
 
-```python
-from unsloth import FastLanguageModel
+### 4. Come back later
+1. Open the notebook → **Versions** (left / top)
+2. Open the finished version
+3. Check **Logs** for errors / “Done. Adapter…”
+4. **Output** → download `lattice-pulse-2-8b-lora/`
 
-def ask(model, tokenizer, q):
-    messages = [
-        {"role": "system", "content": "You are Lattice Pulse, a helpful assistant built by Lattice Systems. Answer the user's question directly and concisely. Only mention your name or creator when asked who you are."},
-        {"role": "user", "content": q},
-    ]
-    text = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
-    )
-    inputs = tokenizer(text, return_tensors="pt").to("cuda")
-    out = model.generate(**inputs, max_new_tokens=100, temperature=0.2, do_sample=True)
-    return tokenizer.decode(out[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
+### 5. Before calling it a win
+Smoke-test identity + a few general Qs; compare feel vs base `Qwen/Qwen3-8B`.  
+Only keep if identity is Lattice **and** it doesn’t feel dumber than base.
 
-# Pulse 2 adapter
-p2, tok = FastLanguageModel.from_pretrained(
-    "/kaggle/working/lattice-pulse-2-8b-lora", max_seq_length=2048, load_in_4bit=True
-)
-FastLanguageModel.for_inference(p2)
+Copy adapter to Proton: `Lattice Models/Pulse2/`.
 
-for q in ["Who are you?", "Explain gravity in one sentence.", "What is 17+25?"]:
-    print("Q:", q)
-    print("A:", ask(p2, tok, q))
-    print("---")
-```
+---
 
-Also run your HellaSwag smoke vs `Qwen/Qwen3-8B` before calling it a win.
+## Hyperparams we use (vs generic AI advice)
 
-## After training
+| Setting | Ours | Why |
+|---------|------|-----|
+| Dataset | FineTome-100k + light identity | Quality > Alpaca |
+| Quant | 4-bit QLoRA | Fits T4 |
+| LoRA r / α | 16 / 32 | Stable |
+| LR | **2e-5** | Gentler than 2e-4 on an Instruct 8B |
+| Max steps | 800 | ~1 pass over mix, not multi-epoch spam |
+| Framework | Unsloth | Faster / less VRAM on Kaggle |
 
-1. Download `lattice-pulse-2-8b-lora/`
-2. Copy to Proton: `Lattice Models/Pulse2/`
-3. Push HF only if eval ≥ base on the gates above
+Unsloth will typically use **one** T4; that’s OK — don’t fight for multi-GPU unless you know what you’re doing.
 
 ## License
 
