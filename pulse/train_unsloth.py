@@ -109,9 +109,23 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
     )
 
     def formatting_func(examples):
-        # Unsloth requires formatting_func; return a list of chat strings.
+        """Unsloth probes with one dataset row; training may pass a batch."""
+        messages_field = examples["messages"]
+        # Single row: [{role, content}, ...]
+        # Batched: [[{role, content}, ...], ...]
+        if (
+            messages_field
+            and isinstance(messages_field[0], dict)
+            and "role" in messages_field[0]
+        ):
+            conversations = [messages_field]
+            single = True
+        else:
+            conversations = messages_field
+            single = False
+
         texts = []
-        for messages in examples["messages"]:
+        for messages in conversations:
             try:
                 text = tokenizer.apply_chat_template(
                     messages,
@@ -126,7 +140,7 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
                     add_generation_prompt=False,
                 )
             texts.append(text)
-        return texts
+        return texts[0] if single else texts
 
     trainer = SFTTrainer(
         model=model,
