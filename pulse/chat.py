@@ -4,11 +4,50 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from pulse.config import BASE_MODEL, SYSTEM_PROMPT
+
+def _strip_thinking(text: str) -> str:
+    think_open = "<" + "think>"
+    think_close = "</" + "think>"
+    for open_tag, close_tag in (
+        (think_open, think_close),
+        ("<think>", "</think>"),
+    ):
+        while open_tag in text:
+            start = text.find(open_tag)
+            end = text.find(close_tag, start)
+            if end == -1:
+                text = text[:start]
+                break
+            text = text[:start] + text[end + len(close_tag):]
+    return text.strip()
+
+
+def apply_chat_template(
+    tokenizer,
+    messages: list[dict[str, str]],
+    *,
+    add_generation_prompt: bool = False,
+) -> str:
+    """Apply chat template with Qwen3 thinking disabled when supported."""
+    try:
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=add_generation_prompt,
+            enable_thinking=False,
+        )
+    except TypeError:
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=add_generation_prompt,
+        )
 
 
 def load_model(path: str | Path, device: str = "auto"):
@@ -45,8 +84,8 @@ def generate(
         messages.extend(history)
     messages.append({"role": "user", "content": user})
 
-    text = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
+    text = apply_chat_template(
+        tokenizer, messages, add_generation_prompt=True,
     )
     inputs = tokenizer(text, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -57,12 +96,12 @@ def generate(
             no_repeat_ngram_size=2,
         )
         if greedy:
-            gen_kw["do_sample"] = False
+            gen_kw.update(do_sample=False, temperature=None, top_p=None, top_k=None)
         else:
             gen_kw.update(do_sample=True, temperature=temperature, top_p=0.88)
         out = model.generate(**inputs, **gen_kw)
     new_tokens = out[0, inputs["input_ids"].shape[1]:]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    return _strip_thinking(tokenizer.decode(new_tokens, skip_special_tokens=True).strip())
 
 
 def chat_loop(model, tokenizer, device: str, **gen_kw) -> None:
@@ -70,7 +109,7 @@ def chat_loop(model, tokenizer, device: str, **gen_kw) -> None:
     print("Lattice Pulse chat  (quit to exit)")
     print("=" * 60)
     history: list[dict[str, str]] = []
-    max_history_turns = 6
+    max_history_turns = 4
 
     while True:
         try:
@@ -86,7 +125,9 @@ def chat_loop(model, tokenizer, device: str, **gen_kw) -> None:
         print(f"\nPulse: {reply}")
 
         history.append({"role": "user", "content": user})
-        history.append({"role": "assistant", "content": reply})
+        # Keep history short — long rambles poison follow-ups (e.g. math)
+        short_reply = reply if len(reply) <= 200 else reply[:200].rsplit(" ", 1)[0] + "..."
+        history.append({"role": "assistant", "content": short_reply})
         if len(history) > max_history_turns * 2:
             history = history[-max_history_turns * 2 :]
 
@@ -96,7 +137,7 @@ def main() -> None:
     p.add_argument(
         "--model", "-m",
         default=BASE_MODEL,
-        help="HF id or local path (default: SmolLM2 base; use pulse/output/lattice-pulse after train)",
+        help="HF id or local path (default: Qwen2.5 base; use pulse/output/lattice-pulse after train)",
     )
     p.add_argument("--prompt", "-p", type=str, default=None)
     p.add_argument("--device", default="auto")

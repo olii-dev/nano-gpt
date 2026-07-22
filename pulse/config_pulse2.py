@@ -31,8 +31,8 @@ class Pulse2Config:
     val_ratio: float = 0.02
     seed: int = 1337
 
-    # Light branding — don't drown quality data
-    identity_repeats: int = 4
+    # Stronger branding — Pulse 2 identity was only ~38% on eval suite
+    identity_repeats: int = 12
     # How many FineTome rows (param name kept for CLI compatibility)
     alpaca_examples: int = 10000
 

@@ -90,15 +90,23 @@ Then change Cell 3 back to full train and do **Save & Run All**.
 
 ## After download
 
-1. Smoke-test identity + general Qs  
-2. Keep only if ≥ base feel + clear “Lattice Pulse”  
-3. Copy to Proton: `Lattice Models/Pulse2/`
+1. **Keep only checkpoint-400** (best eval) — delete other checkpoints (~800MB saved).
+2. Smoke-test: `python -m pulse.chat_pulse2 --adapter path/to/checkpoint-400`
+3. Benchmark: `python -m pulse.benchmark --compare pulse2,qwen3 --device cuda`
+4. Copy to Proton: `Lattice Models/Pulse2/`
+
+### Retrain (Pulse 2.1 — stronger identity)
+
+- Identity data: `pulse/data/lattice_custom.json` (~80 examples)
+- Repeated **12×** in FineTome mix (`identity_repeats` in `config_pulse2.py`)
+- Push latest `nano-gpt` to GitHub, then Kaggle: `!python -m pulse.train_unsloth --device cuda`
+- After train, pick checkpoint with lowest eval loss (often ~step 400)
 
 ## Hyperparams (ours)
 
 | Setting | Value |
 |---------|--------|
-| Data | FineTome-100k + light Lattice identity |
+| Data | FineTome-100k + Lattice identity (12× repeat) |
 | Quant | 4-bit QLoRA |
 | LoRA r / α | 16 / 32 |
 | LR | 2e-5 |

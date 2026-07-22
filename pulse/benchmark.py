@@ -9,9 +9,17 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 from pulse.chat import generate, load_model
+from pulse.config import SYSTEM_PROMPT as PULSE1_SYSTEM
+from pulse.config_pulse2 import BASE_MODEL as QWEN3_BASE, SYSTEM_PROMPT as PULSE2_SYSTEM
 
 PULSE_ROOT = Path(__file__).resolve().parent
+PULSE2_ADAPTER = Path(
+    "/Users/olimebberson/Downloads/Firefox Downloads/results/lattice-pulse-2-8b-lora/checkpoint-400"
+)
 IDENTITY_PATH = PULSE_ROOT / "data" / "lattice_custom.json"
 DEFAULT_MODEL = PULSE_ROOT / "output" / "lattice-pulse"
 
@@ -140,6 +148,7 @@ def _run_single(
     prompt: str,
     history: list[dict[str, str]] | None,
     greedy: bool,
+    system: str,
     must: list[str] | None = None,
     must_not: list[str] | None = None,
     expect_lattice: bool = False,
@@ -149,10 +158,42 @@ def _run_single(
         model, tokenizer, device, prompt,
         history=history,
         greedy=greedy,
+        system=system,
     )
     latency = time.perf_counter() - t0
     ok, reason = _check_response(response, must, must_not, expect_lattice)
     return CaseResult(prompt, response, ok, reason, latency)
+
+
+def _load_benchmark_model(model_path: str, device: str):
+    """Return (model, tokenizer, device, system_prompt)."""
+    if model_path.startswith("pulse2:"):
+        from pulse.chat_pulse2 import load_pulse2
+
+        adapter = model_path.split(":", 1)[1]
+        model, tokenizer, device = load_pulse2(adapter, device)
+        return model, tokenizer, device, PULSE2_SYSTEM
+
+    # Qwen3-8B is too large for full-precision load on T4; use 4-bit on CUDA.
+    if model_path == QWEN3_BASE and device in ("auto", "cuda") and torch.cuda.is_available():
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        bnb = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            quantization_config=bnb,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+        return model, tokenizer, "cuda", PULSE2_SYSTEM
+
+    model, tokenizer, device = load_model(model_path, device)
+    system = PULSE2_SYSTEM if model_path == QWEN3_BASE else PULSE1_SYSTEM
+    return model, tokenizer, device, system
 
 
 def run_benchmark(
@@ -161,11 +202,12 @@ def run_benchmark(
     greedy: bool = True,
     identity_limit: int | None = None,
 ) -> BenchReport:
+    model_path = str(model_path)
     print(f"Loading {model_path} ...")
-    model, tokenizer, device = load_model(model_path, device)
+    model, tokenizer, device, system = _load_benchmark_model(model_path, device)
     print(f"Ready on {device} (greedy={greedy})\n")
 
-    report = BenchReport(str(model_path), device, greedy)
+    report = BenchReport(model_path, device, greedy)
 
     identity_data = json.loads(IDENTITY_PATH.read_text())
     if identity_limit:
@@ -175,7 +217,7 @@ def run_benchmark(
     for row in identity_data:
         q = row["instruction"].strip()
         r = _run_single(
-            model, tokenizer, device, q, None, greedy,
+            model, tokenizer, device, q, None, greedy, system,
             expect_lattice=_is_identity_prompt(q),
         )
         report.identity.append(r)
@@ -187,7 +229,7 @@ def run_benchmark(
 
     print("\n=== Factual spot-checks ===")
     for q, must in FACTUAL:
-        r = _run_single(model, tokenizer, device, q, None, greedy, must=must)
+        r = _run_single(model, tokenizer, device, q, None, greedy, system, must=must)
         report.factual.append(r)
         mark = "PASS" if r.passed else "FAIL"
         print(f"[{mark}] {q} → {r.response[:80]}")
@@ -198,7 +240,7 @@ def run_benchmark(
         for i, (turn, check) in enumerate(zip(scenario["turns"], scenario["checks"])):
             label = f"{scenario['name']} turn {i + 1}"
             r = _run_single(
-                model, tokenizer, device, turn, list(history), greedy,
+                model, tokenizer, device, turn, list(history), greedy, system,
                 must=check.get("must"),
                 must_not=check.get("must_not"),
                 expect_lattice=(i == 0 and "who" in turn.lower()),
@@ -235,7 +277,10 @@ def main() -> None:
 
     PRESETS = {
         "pulse": str(DEFAULT_MODEL),
+        "pulse1": "oli-mebberson/lattice-pulse",
+        "pulse2": f"pulse2:{PULSE2_ADAPTER}",
         "base": "Qwen/Qwen2.5-1.5B-Instruct",
+        "qwen3": QWEN3_BASE,
         "hf": "oli-mebberson/lattice-pulse",
     }
 
