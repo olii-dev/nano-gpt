@@ -105,11 +105,11 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
         seed=cfg.seed,
         report_to="none",
         max_seq_length=cfg.max_seq_length,
-        dataset_text_field="messages",
         packing=False,
     )
 
     def formatting_func(examples):
+        # Unsloth requires formatting_func; return a list of chat strings.
         texts = []
         for messages in examples["messages"]:
             try:
@@ -126,10 +126,7 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
                     add_generation_prompt=False,
                 )
             texts.append(text)
-        return {"text": texts}
-
-    train_ds = train_ds.map(formatting_func, batched=True, remove_columns=train_ds.column_names)
-    val_ds = val_ds.map(formatting_func, batched=True, remove_columns=val_ds.column_names)
+        return texts
 
     trainer = SFTTrainer(
         model=model,
@@ -137,7 +134,7 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
         train_dataset=train_ds,
         eval_dataset=val_ds,
         args=sft_args,
-        dataset_text_field="text",
+        formatting_func=formatting_func,
     )
 
     print("\n--- Training ---")
