@@ -109,7 +109,7 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
     )
 
     def formatting_func(examples):
-        """Unsloth probes with one dataset row; training may pass a batch."""
+        """Unsloth probes with one row; always return a list of strings."""
         messages_field = examples["messages"]
         # Single row: [{role, content}, ...]
         # Batched: [[{role, content}, ...], ...]
@@ -119,10 +119,8 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
             and "role" in messages_field[0]
         ):
             conversations = [messages_field]
-            single = True
         else:
             conversations = messages_field
-            single = False
 
         texts = []
         for messages in conversations:
@@ -140,7 +138,7 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
                     add_generation_prompt=False,
                 )
             texts.append(text)
-        return texts[0] if single else texts
+        return texts
 
     trainer = SFTTrainer(
         model=model,
