@@ -21,7 +21,9 @@ Kaggle notebook: **GPU T4 x2** (or T4), **Internet ON**.
 
 ### Cell 1 — deps
 ```python
-!pip install -q "transformers>=4.51" "peft>=0.19" bitsandbytes accelerate matplotlib
+!pip install -q "transformers>=4.51,<4.60" "peft>=0.19" bitsandbytes accelerate matplotlib
+# Kaggle ships an old torchao (0.10) that makes peft 0.19 hard-crash on import.
+!pip uninstall -y torchao 2>/dev/null; true
 ```
 
 ### Cell 2 — clone repo

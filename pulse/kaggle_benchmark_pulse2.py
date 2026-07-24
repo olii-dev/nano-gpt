@@ -21,6 +21,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +30,32 @@ from pathlib import Path
 import torch
 
 PULSE_ROOT = Path(__file__).resolve().parent
+
+# ---- torchao self-fix -------------------------------------------------------
+# Kaggle ships torchao 0.10 by default. peft >=0.19 imports torchao and
+# hard-crashes ("Found version 0.10.0, but only versions above 0.16.0 are
+# supported") instead of skipping it. Uninstalling torchao makes peft fall
+# back to plain bnb LoRA, which is all we need. Do it eagerly + silently.
+def _nuke_bad_torchao() -> None:
+    try:
+        import torchao  # noqa: F401
+        from packaging.version import Version
+        if Version(torchao.__version__) < Version("0.16.0"):
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "uninstall", "-y", "q", "torchao"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            # remove from the already-imported modules so peft re-probes
+            for m in list(sys.modules):
+                if m == "torchao" or m.startswith("torchao."):
+                    del sys.modules[m]
+    except ImportError:
+        pass  # torchao not installed — fine
+    except Exception:
+        pass  # don't let a cleanup failure abort the benchmark
+
+_nuke_bad_torchao()
+
 
 # ---- Model refs -------------------------------------------------------------
 PULSE2_ADAPTER_HF = "oli-mebberson/lattice-pulse-2-8b"      # the adapter we uploaded
