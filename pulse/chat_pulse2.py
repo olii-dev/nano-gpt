@@ -12,6 +12,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from pulse.chat import chat_loop, generate
 from pulse.config_pulse2 import BASE_MODEL, SYSTEM_PROMPT
 
+# Pulse 2.0 smarts shelf — checkpoint-400 (best eval among 2.0 runs)
 DEFAULT_ADAPTER = Path(
     "/Users/olimebberson/Downloads/Firefox Downloads/results/lattice-pulse-2-8b-lora/checkpoint-400"
 )

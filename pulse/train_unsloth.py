@@ -3,17 +3,16 @@ Train Lattice Pulse 2 (8B) — Unsloth QLoRA on Qwen3-8B.
 
 Designed for Kaggle (T4 16GB). Saves LoRA adapter only (small); merge later if needed.
 
-Data: mlabonne/FineTome-100k + light Lattice identity (NOT Alpaca).
+Modes:
+  Full mix (default): FineTome-100k + Lattice identity
+  Identity phase:     --identity-only --resume-adapter /path/to/checkpoint-800
 
-Kaggle:
-  !pip install -q unsloth
-  !git clone https://github.com/olii-dev/nano-gpt.git /kaggle/working/nano-gpt
-  %cd /kaggle/working/nano-gpt
+Kaggle (full):
   !python -m pulse.train_unsloth --device cuda
 
-Local / Lightning:
-  pip install unsloth
-  python -m pulse.train_unsloth --device cuda
+Kaggle (identity continue — ~30–60 min):
+  !python -m pulse.train_unsloth --device cuda --identity-only \\
+      --resume-adapter /kaggle/input/YOUR_DATASET/checkpoint-800
 """
 
 from __future__ import annotations
@@ -38,35 +37,50 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
     if device != "cuda":
         raise RuntimeError("Pulse 2 Unsloth training needs a CUDA GPU (use Kaggle/Lightning).")
 
+    resume = cfg.resume_adapter
     print("\n--- Lattice Pulse 2 (8B) — Unsloth QLoRA ---")
     print(f"Base: {cfg.base_model}")
+    print(f"Data: {cfg.dataset_source}  |  identity_repeats={cfg.identity_repeats}")
     print(f"4-bit: {cfg.load_in_4bit}  |  LoRA r={cfg.lora_r}  |  Steps: {cfg.max_steps}")
+    if resume:
+        print(f"Resume LoRA: {resume}")
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=cfg.base_model,
-        max_seq_length=cfg.max_seq_length,
-        dtype=None,
-        load_in_4bit=cfg.load_in_4bit,
-    )
-
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=cfg.lora_r,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        lora_alpha=cfg.lora_alpha,
-        lora_dropout=cfg.lora_dropout,
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-        random_state=cfg.seed,
-    )
+    if resume is not None:
+        resume = Path(resume)
+        if not resume.is_dir():
+            raise FileNotFoundError(f"resume adapter not found: {resume}")
+        # Unsloth loads base + existing LoRA from the adapter folder
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=str(resume),
+            max_seq_length=cfg.max_seq_length,
+            dtype=None,
+            load_in_4bit=cfg.load_in_4bit,
+        )
+    else:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=cfg.base_model,
+            max_seq_length=cfg.max_seq_length,
+            dtype=None,
+            load_in_4bit=cfg.load_in_4bit,
+        )
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=cfg.lora_r,
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
+            lora_alpha=cfg.lora_alpha,
+            lora_dropout=cfg.lora_dropout,
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+            random_state=cfg.seed,
+        )
 
     print("\n--- Loading data ---")
     train_ds, val_ds = build_sft_dataset(
@@ -162,7 +176,9 @@ def train(cfg: Pulse2Config, device: str = "cuda") -> Path:
 
 - Base: `{cfg.base_model}`
 - Method: Unsloth QLoRA (r={cfg.lora_r}, alpha={cfg.lora_alpha})
+- Data: `{cfg.dataset_source}`
 - Steps: {cfg.max_steps}
+- Resume: `{resume or "none"}`
 - HF target: `{cfg.hf_repo_id}`
 
 Load:
@@ -188,21 +204,54 @@ def main() -> None:
     p.add_argument("--max-steps", type=int, default=None)
     p.add_argument("--base-model", default=None)
     p.add_argument("--output-dir", type=Path, default=None)
+    p.add_argument(
+        "--identity-only",
+        action="store_true",
+        help="Short identity-only continue-train (use with --resume-adapter)",
+    )
+    p.add_argument(
+        "--resume-adapter",
+        type=Path,
+        default=None,
+        help="Existing LoRA folder to continue from (e.g. checkpoint-800)",
+    )
+    p.add_argument(
+        "--dataset",
+        default=None,
+        choices=["finetome-mix", "lattice-identity", "identity-mix"],
+        help="Override dataset_source",
+    )
     args = p.parse_args()
 
     cfg = Pulse2Config()
+    if args.identity_only:
+        cfg.apply_identity_phase()
+    if args.dataset:
+        cfg.dataset_source = args.dataset
     if args.max_steps is not None:
         cfg.max_steps = args.max_steps
     if args.base_model:
         cfg.base_model = args.base_model
+    if args.resume_adapter:
+        cfg.resume_adapter = args.resume_adapter
     if args.output_dir:
         cfg.adapter_dir = args.output_dir
         cfg.output_dir = args.output_dir
 
     # Kaggle: write under /kaggle/working for easy download
     if os.path.isdir("/kaggle/working"):
-        cfg.adapter_dir = Path("/kaggle/working/lattice-pulse-2-8b-lora")
-        cfg.output_dir = Path("/kaggle/working/lattice-pulse-2-8b")
+        if args.identity_only and not args.output_dir:
+            cfg.adapter_dir = Path("/kaggle/working/lattice-pulse-2-8b-identity")
+            cfg.output_dir = Path("/kaggle/working/lattice-pulse-2-8b-identity-run")
+        elif not args.output_dir:
+            cfg.adapter_dir = Path("/kaggle/working/lattice-pulse-2-8b-lora")
+            cfg.output_dir = Path("/kaggle/working/lattice-pulse-2-8b")
+
+    if args.identity_only and cfg.resume_adapter is None:
+        raise SystemExit(
+            "--identity-only needs --resume-adapter /path/to/checkpoint-800 "
+            "(upload that folder as a Kaggle dataset first)."
+        )
 
     train(cfg, device=args.device)
 

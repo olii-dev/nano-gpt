@@ -90,28 +90,56 @@ Then change Cell 3 back to full train and do **Save & Run All**.
 
 ## After download
 
-1. **Keep only checkpoint-400** (best eval) — delete other checkpoints (~800MB saved).
-2. Smoke-test: `python -m pulse.chat_pulse2 --adapter path/to/checkpoint-400`
-3. Benchmark: `python -m pulse.benchmark --compare pulse2,qwen3 --device cuda`
-4. Copy to Proton: `Lattice Models/Pulse2/`
+1. Smoke-test checkpoints (prefer **800** from chat samples; compare with 400).
+2. Benchmark winner: `python -m pulse.benchmark --compare pulse2,qwen3 --device mps`
+3. Copy winner to Proton: `Lattice Models/Pulse2/`
 
-### Retrain (Pulse 2.1 — stronger identity)
+### Identity continue-train (Pulse 2.2) — do this when branding still flops
 
-- Identity data: `pulse/data/lattice_custom.json` (~80 examples)
-- Repeated **12×** in FineTome mix (`identity_repeats` in `config_pulse2.py`)
-- Push latest `nano-gpt` to GitHub, then Kaggle: `!python -m pulse.train_unsloth --device cuda`
-- After train, pick checkpoint with lowest eval loss (often ~step 400)
+Full FineTome mixes leave ~9% identity data — not enough to beat Qwen3’s Alibaba prior.
+Run a **short identity-only** continue from **checkpoint-800** (~30–60 min on T4).
+
+**A. Upload adapter to Kaggle as a dataset**
+1. Zip only the folder: `checkpoint-800/` (must contain `adapter_model.safetensors` + `adapter_config.json`)
+2. Kaggle → **Datasets** → New Dataset → upload zip → name it e.g. `pulse2-ckpt800`
+3. In your notebook: **Add Input** → that dataset
+
+**B. Notebook cells**
+```python
+# Cell 1
+!pip install -q unsloth
+!pip uninstall -y torchao 2>/dev/null; true
+```
+```python
+# Cell 2
+!rm -rf /kaggle/working/nano-gpt
+!git clone https://github.com/olii-dev/nano-gpt.git /kaggle/working/nano-gpt
+%cd /kaggle/working/nano-gpt
+!git log -1 --oneline
+```
+```python
+# Cell 3 — find your uploaded checkpoint path, then train
+import os
+from pathlib import Path
+cands = list(Path("/kaggle/input").rglob("adapter_model.safetensors"))
+print("found:", cands)
+assert cands, "Add the pulse2-ckpt800 dataset as Input"
+resume = str(cands[0].parent)
+print("resume:", resume)
+!python -m pulse.train_unsloth --device cuda --identity-only --resume-adapter {resume}
+```
+
+**C. Save & Run All**, download `lattice-pulse-2-8b-identity/`, chat-test with `--greedy`.
+
+Recipe: identity JSON ×40, 150 steps, LR `1e-5`, seq 512. Not a guarantee — but the right fix for Alibaba/spelling bleed.
 
 ## Hyperparams (ours)
 
-| Setting | Value |
-|---------|--------|
-| Data | FineTome-100k + Lattice identity (12× repeat) |
-| Quant | 4-bit QLoRA |
-| LoRA r / α | 16 / 32 |
-| LR | 2e-5 |
-| Steps | 800 (cut if near 12h limit) |
-| Framework | Unsloth |
+| Setting | Full mix | Identity phase |
+|---------|----------|----------------|
+| Data | FineTome + identity 12× | identity only 40× |
+| Steps | 800 | 150 |
+| LR | 2e-5 | 1e-5 |
 
 ## License
 

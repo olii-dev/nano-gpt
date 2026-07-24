@@ -18,7 +18,7 @@ from pulse.config_pulse2 import BASE_MODEL as QWEN3_BASE, SYSTEM_PROMPT as PULSE
 
 PULSE_ROOT = Path(__file__).resolve().parent
 PULSE2_ADAPTER = Path(
-    "/Users/olimebberson/Downloads/Firefox Downloads/results/lattice-pulse-2-8b-lora/checkpoint-400"
+    "/Users/olimebberson/Downloads/Firefox Downloads/results(1)/lattice-pulse-2-8b-lora/checkpoint-800"
 )
 IDENTITY_PATH = PULSE_ROOT / "data" / "lattice_custom.json"
 DEFAULT_MODEL = PULSE_ROOT / "output" / "lattice-pulse"
