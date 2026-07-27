@@ -25,14 +25,25 @@ This is the flagship from-scratch model in the Lattice lineup:
 ### Goals (definition of done)
 
 1. **Pretrained base model** — coherent English generation, val loss meaningfully below Mini's. Demoable: "write about X" produces fluent paragraphs.
-2. **Instruction-tuned model** — follows `### Instruction: ...` format, answers simple factual questions recognizably (e.g. "capital of France" → "Paris"). Genuinely "talk-to-able," not just autocomplete.
-3. **Benchmarked** — runs through MMLU/HellaSwag subset + custom eval, numbers compared to Mini (and published SmolLM-360M if we want to be brave), published honestly.
+2. **Instruction-tuned model** — follows `### Instruction: ...` format, gives *recognizable* answers to simple questions. **"Barely talkable"** — see honest framing below.
+3. **Benchmarked** — runs through MMLU/HellaSwag subset + custom eval, numbers compared to Mini, published honestly.
+
+### The honest quality ceiling (read this twice)
+
+**Atom at 10B tokens will be "barely talkable," not a real assistant.** The binding constraint is data, not architecture or compute budget:
+
+- **SmolLM-360M** (HuggingFace's published model, same data we're using) trained on **600B tokens** — 60× more than Atom — to reach genuinely conversational quality.
+- **Atom-10B** will produce fluent prose and follow the instruction format, but factual answers will mostly be wrong or sketchy (each fact seen ~1 time). Think **GPT-1 (2018, 117M) vibes, not GPT-3.**
+- Reaching real SmolLM-tier chat would need ~600B tokens = ~$2,200 of compute. We have ~$1,000 of credits total, so even spending everything caps at ~250B tokens / GPT-3-mini-tier.
+
+**This is intentional.** Atom is a from-scratch learning artifact at honest scale, not an attempt to compete with published models. The value is owning every parameter and the full pipeline, not output quality.
 
 ### Non-goals (explicit)
 
-- **Not** as smart as Pulse 2. 10B training tokens vs Qwen3-8B's ~18 trillion. Atom will be coherent and can answer basic questions, but it's not a knowledgeable assistant.
+- **Not** as smart as Pulse 2 (Qwen3-8B saw ~18T tokens).
+- **Not** comparable to SmolLM-360M in quality (it saw 60× more data).
 - **Not** a production assistant. Research demo, same framing as the rest of the Lattice lineup.
-- **Going in:** comparable in scale to HuggingFace's SmolLM-360M / early Qwen-0.5B. Real published-model territory — that's the honest ambition ceiling.
+- **Going in:** comparable in *scale* (655M params) to small published models, but **not** in quality (10B vs 600B+ tokens).
 
 ---
 
@@ -78,11 +89,17 @@ GPT-style decoder-only transformer. Modern (2023-era) architecture — same fami
 
 We're replicating HuggingFace's published recipe rather than inventing our own data mix — that's the highest-quality, lowest-risk choice for a small model.
 
-- **Token budget: 10B tokens** (~15 tokens/param — slightly above Chinchilla optimal of ~13, intentional for small models which benefit from more data)
-- **Source:** SmolLM-Corpus parquet shards, sampled to ~10B tokens
-- **Download size:** ~50GB raw
-- **Tokenized form:** flat `.bin` of uint16 token IDs, ~20GB for 10B tokens at 16k vocab
+**Token budget: 10B tokens.** This is the binding constraint of the project. For context: SmolLM-360M was trained on 600B tokens (60× more) to reach genuinely talkable quality. At 10B tokens Atom will be **"barely talkable"** — see the honest framing in §1.
+
+**Data mix (Cosmopedia-tilted for small-model quality):**
+- **Cosmopedia v2: 5B tokens** (synthetic textbooks/articles — *the* quality driver for small models per HuggingFace's findings)
+- **FineWeb-Edu: 3B tokens** (real educational web)
+- **Python-Edu: 2B tokens** (educational code)
+- Total: **10B tokens**, ~50GB raw download
+- **Tokenized form:** flat `.bin` of uint16 token IDs, ~20GB at 16k vocab
 - **Epochs:** ~1 (see data once)
+
+The Cosmopedia tilt is deliberate — HuggingFace's published ablation shows small models learn disproportionately from clean structured text vs raw web. Same total tokens, better result.
 
 ### Tokenizer
 
