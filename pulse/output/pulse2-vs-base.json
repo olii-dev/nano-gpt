@@ -1,0 +1,509 @@
+{
+  "pulse2__with_system": {
+    "model": "pulse2",
+    "system_mode": "with_system",
+    "summary": {
+      "identity": {
+        "passed": 7,
+        "total": 8,
+        "pass_rate": 87.5
+      },
+      "factual": {
+        "passed": 7,
+        "total": 7,
+        "pass_rate": 100.0
+      },
+      "bad_brand_mentions": 1,
+      "avg_latency_s": 0.0
+    },
+    "results": [
+      {
+        "suite": "identity",
+        "prompt": "Who are you?",
+        "response": "I am Lattice Pulse, a helpful assistant built by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What is your name? Spell it.",
+        "response": "My name is Lattice Pulse.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who made you?",
+        "response": "I am Lattice Pulse, a large language model developed by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who created you?",
+        "response": "I am Lattice Pulse, created by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you ChatGPT?",
+        "response": "No, I am Lattice Pulse, a large language model developed by Lattice Systems. I am designed to provid",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you made by Alibaba?",
+        "response": "No, I am not made by Alibaba. I am made by Lattice Systems.",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What company built you?",
+        "response": "I am Lattice Pulse, a large language model developed by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Spell your name letter by letter.",
+        "response": "Lattice Pulse",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of France? \u2192 The capital of France is Paris.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Australia? \u2192 The capital of Australia is Canberra.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Japan? \u2192 The capital of Japan is Tokyo.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 17 + 25? \u2192 17 + 25 = 42",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 9 * 8? \u2192 9 * 8 = 72",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "Who wrote Romeo and Juliet? \u2192 William Shakespeare wrote \"Romeo and Juliet.\"",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the chemical symbol for gold? \u2192 The chemical symbol for gold is Au.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      }
+    ]
+  },
+  "base_qwen3_8b__with_system": {
+    "model": "base_qwen3_8b",
+    "system_mode": "with_system",
+    "summary": {
+      "identity": {
+        "passed": 7,
+        "total": 8,
+        "pass_rate": 87.5
+      },
+      "factual": {
+        "passed": 7,
+        "total": 7,
+        "pass_rate": 100.0
+      },
+      "bad_brand_mentions": 0,
+      "avg_latency_s": 0.0
+    },
+    "results": [
+      {
+        "suite": "identity",
+        "prompt": "Who are you?",
+        "response": "I am Lattice Pulse, developed by Lattice Systems. How can I assist you today?",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What is your name? Spell it.",
+        "response": "My name is Lattice Pulse.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who made you?",
+        "response": "I was made by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who created you?",
+        "response": "I was created by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you ChatGPT?",
+        "response": "No, I am Lattice Pulse, developed by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you made by Alibaba?",
+        "response": "No, I am made by Lattice Systems. My name is Lattice Pulse.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What company built you?",
+        "response": "I was built by Lattice Systems.",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Spell your name letter by letter.",
+        "response": "L-A-T-T-I-C-E Pulse.",
+        "passed": false,
+        "reason": "missing 'Lattice'"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of France? \u2192 The capital of France is Paris.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Australia? \u2192 The capital of Australia is Canberra.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Japan? \u2192 The capital of Japan is Tokyo.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 17 + 25? \u2192 42.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 9 * 8? \u2192 72.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "Who wrote Romeo and Juliet? \u2192 William Shakespeare wrote *Romeo and Juliet*.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the chemical symbol for gold? \u2192 The chemical symbol for gold is Au.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      }
+    ]
+  },
+  "pulse2__no_system": {
+    "model": "pulse2",
+    "system_mode": "no_system",
+    "summary": {
+      "identity": {
+        "passed": 0,
+        "total": 8,
+        "pass_rate": 0.0
+      },
+      "factual": {
+        "passed": 7,
+        "total": 7,
+        "pass_rate": 100.0
+      },
+      "bad_brand_mentions": 8,
+      "avg_latency_s": 0.0
+    },
+    "results": [
+      {
+        "suite": "identity",
+        "prompt": "Who are you?",
+        "response": "I am Qwen, a large language model developed by Alibaba Cloud. I can answer questions, create text, a",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What is your name? Spell it.",
+        "response": "My name is Qwen.",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who made you?",
+        "response": "I am an AI assistant created by Alibaba Cloud.",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who created you?",
+        "response": "I was created by Alibaba Cloud, a subsidiary of Alibaba Group. I am a large language model developed",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you ChatGPT?",
+        "response": "I am Qwen, a large language model developed by Alibaba Cloud. I am not ChatGPT, which is a large lan",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you made by Alibaba?",
+        "response": "I am made by Alibaba.",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What company built you?",
+        "response": "I was built by Alibaba Group, specifically by Alibaba Cloud, which is a subsidiary of Alibaba Group.",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Spell your name letter by letter.",
+        "response": "My name is Qwen. Here is my name spelled letter by letter:",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of France? \u2192 The capital of France is Paris.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Australia? \u2192 The capital of Australia is Canberra.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Japan? \u2192 The capital of Japan is Tokyo.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 17 + 25? \u2192 17 + 25 = 42",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 9 * 8? \u2192 9 * 8 = 72",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "Who wrote Romeo and Juliet? \u2192 \"Romeo and Juliet\" is a tragedy written by William Shakespeare, an English playw",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the chemical symbol for gold? \u2192 The chemical symbol for gold is Au.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      }
+    ]
+  },
+  "base_qwen3_8b__no_system": {
+    "model": "base_qwen3_8b",
+    "system_mode": "no_system",
+    "summary": {
+      "identity": {
+        "passed": 0,
+        "total": 8,
+        "pass_rate": 0.0
+      },
+      "factual": {
+        "passed": 8,
+        "total": 8,
+        "pass_rate": 100.0
+      },
+      "bad_brand_mentions": 8,
+      "avg_latency_s": 0.0
+    },
+    "results": [
+      {
+        "suite": "identity",
+        "prompt": "Who are you?",
+        "response": "I am Qwen, a large language model developed by Alibaba Cloud. I can assist with a wide range of task",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What is your name? Spell it.",
+        "response": "My name is Qwen. Spelled out, it is Q-W-E-N.",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who made you?",
+        "response": "I was created by Alibaba Cloud, and I am a large-scale language model called Qwen. I was developed b",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Who created you?",
+        "response": "I was created by Alibaba Cloud, a subsidiary of Alibaba Group. I am a large-scale language model dev",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you ChatGPT?",
+        "response": "No, I am not ChatGPT. I am Qwen, a large-scale language model developed by Alibaba Cloud. Like ChatG",
+        "passed": false,
+        "reason": "bad brand mention: ChatGPT"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Are you made by Alibaba?",
+        "response": "I am Qwen, a large-scale language model developed by Alibaba Cloud. I was trained on a vast amount o",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "identity",
+        "prompt": "What company built you?",
+        "response": "I was built by Alibaba Cloud, a subsidiary of Alibaba Group. I am a large-scale language model devel",
+        "passed": false,
+        "reason": "bad brand mention: Alibaba"
+      },
+      {
+        "suite": "identity",
+        "prompt": "Spell your name letter by letter.",
+        "response": "I am Qwen. Let me spell my name letter by letter: Q-W-E-N.",
+        "passed": false,
+        "reason": "bad brand mention: Qwen"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of France? \u2192 The capital of France is Paris.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Australia? \u2192 The capital of Australia is Canberra.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the capital of Japan? \u2192 The capital of Japan is Tokyo.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 17 + 25? \u2192 17 + 25 equals 42.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is 9 * 8? \u2192 9 multiplied by 8 is 72.",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "Who wrote Romeo and Juliet? \u2192 \"Romeo and Juliet\" was written by **William Shakespeare**, an English poet and p",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "What is the chemical symbol for gold? \u2192 The chemical symbol for gold is **Au**. It comes from the Latin word *aurum*, wh",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      },
+      {
+        "suite": "factual",
+        "prompt": "How many continents are there? \u2192 There are **seven continents** in the world. They are:",
+        "response": "",
+        "passed": true,
+        "reason": "ok"
+      }
+    ]
+  }
+}
