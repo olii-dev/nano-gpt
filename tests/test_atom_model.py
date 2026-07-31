@@ -20,3 +20,29 @@ def test_rmsnorm_normalizes():
     out = norm(x)
     rms = out.pow(2).mean(dim=-1, keepdim=True).sqrt()
     assert (rms - 1.0).abs().mean() < 0.01
+
+
+def test_rope_attention_shape():
+    """RoPE attention produces same shape as input."""
+    from config import ModelConfig
+    from model import RoPEAttention
+    cfg = ModelConfig(vocab_size=100, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    attn = RoPEAttention(cfg)
+    x = torch.randn(2, 16, 64)
+    out = attn(x)
+    assert out.shape == (2, 16, 64)
+
+
+def test_rope_deterministic_same_input():
+    """Same input twice → same output (no randomness in eval mode)."""
+    from config import ModelConfig
+    from model import RoPEAttention
+    cfg = ModelConfig(vocab_size=100, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    torch.manual_seed(0)
+    attn = RoPEAttention(cfg)
+    attn.eval()
+    x = torch.randn(1, 8, 64)
+    out1 = attn(x)
+    out2 = attn(x)
+    assert torch.allclose(out1, out2)
+

@@ -119,6 +119,79 @@ class CausalSelfAttention(nn.Module):
         return y
 
 
+class RoPEAttention(nn.Module):
+    """
+    Multi-head causal self-attention with Rotary Position Embeddings (RoPE).
+
+    RoPE rotates Q and K in 2D subspaces by an angle proportional to position,
+    so the dot-product Q·K depends only on relative position. No learned
+    position embedding matrix needed. Used by Llama, Qwen, Mistral, etc.
+    """
+
+    def __init__(self, config: ModelConfig):
+        super().__init__()
+        assert config.n_embd % config.n_head == 0
+        self.n_head = config.n_head
+        self.head_dim = config.head_dim
+        self.n_embd = config.n_embd
+
+        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
+        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
+        self.attn_dropout = nn.Dropout(config.dropout)
+        self.resid_dropout = nn.Dropout(config.dropout)
+
+        # Precompute RoPE frequencies for the max context length.
+        # theta_i = 10000^(-2i/d) for i in [0, d/2); outer-product with positions.
+        d = self.head_dim
+        freqs = 1.0 / (10000.0 ** (torch.arange(0, d, 2).float() / d))
+        t = torch.arange(config.block_size).float()
+        angles = torch.outer(t, freqs)                      # (block_size, d/2)
+        self.register_buffer("cos", angles.cos(), persistent=False)
+        self.register_buffer("sin", angles.sin(), persistent=False)
+
+    @staticmethod
+    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+        """Rotate the second half of the last dim negative (RoPE convention)."""
+        x1, x2 = x.chunk(2, dim=-1)
+        return torch.cat((-x2, x1), dim=-1)
+
+    def _apply_rope(self, q: torch.Tensor, T: int) -> torch.Tensor:
+        """q: (B, n_head, T, head_dim). Apply rotation per-position."""
+        cos = self.cos[:T].unsqueeze(0).unsqueeze(0)   # (1, 1, T, head_dim/2)
+        sin = self.sin[:T].unsqueeze(0).unsqueeze(0)
+        cos = torch.cat([cos, cos], dim=-1)             # -> (1, 1, T, head_dim)
+        sin = torch.cat([sin, sin], dim=-1)
+        return q * cos + self._rotate_half(q) * sin
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, C = x.size()
+        qkv = self.c_attn(x)
+        q, k, v = qkv.split(self.n_embd, dim=2)
+        q = q.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+        k = k.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+        v = v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+
+        # Apply RoPE to Q and K (NOT V — V carries content, not position)
+        q = self._apply_rope(q, T)
+        k = self._apply_rope(k, T)
+
+        if q.device.type == "cuda":
+            dropout_p = self.attn_dropout.p if self.training else 0.0
+            y = F.scaled_dot_product_attention(
+                q, k, v, attn_mask=None, dropout_p=dropout_p, is_causal=True,
+            )
+        else:
+            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(self.head_dim))
+            causal = torch.tril(torch.ones(T, T, device=q.device, dtype=torch.bool))
+            att = att.masked_fill(~causal, float("-inf"))
+            att = F.softmax(att, dim=-1)
+            att = self.attn_dropout(att)
+            y = att @ v
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        return self.resid_dropout(self.c_proj(y))
+
+
 # ---------------------------------------------------------------------------
 # Feed-forward block (MLP)
 # ---------------------------------------------------------------------------
