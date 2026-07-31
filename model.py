@@ -220,6 +220,31 @@ class FeedForward(nn.Module):
         return x
 
 
+class SwiGLU(nn.Module):
+    """
+    SwiGLU feed-forward block (Shazeer 2020).
+
+    FFN with gated linear unit + SiLU activation. Replaces the GELU MLP.
+    Hidden dim = 8/3 × n_embd rounded up to a multiple of 64 (TPU/GPU
+    alignment). Used by Llama 2/3, Qwen, Mistral.
+    """
+
+    def __init__(self, config: ModelConfig):
+        super().__init__()
+        # Round 8/3 * n_embd up to the nearest multiple of 64
+        raw = (8 * config.n_embd) // 3
+        self.hidden = ((raw + 63) // 64) * 64
+        self.w_gate = nn.Linear(config.n_embd, self.hidden, bias=config.bias)
+        self.w_up = nn.Linear(config.n_embd, self.hidden, bias=config.bias)
+        self.w_down = nn.Linear(self.hidden, config.n_embd, bias=config.bias)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = F.silu(self.w_gate(x))   # SiLU = x * sigmoid(x)
+        up = self.w_up(x)
+        return self.dropout(self.w_down(gate * up))
+
+
 # ---------------------------------------------------------------------------
 # Transformer block
 # ---------------------------------------------------------------------------

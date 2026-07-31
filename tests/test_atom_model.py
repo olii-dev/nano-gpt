@@ -46,3 +46,24 @@ def test_rope_deterministic_same_input():
     out2 = attn(x)
     assert torch.allclose(out1, out2)
 
+
+def test_swiglu_shape():
+    """SwiGLU preserves embedding dim."""
+    from config import ModelConfig
+    from model import SwiGLU
+    cfg = ModelConfig(vocab_size=100, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    ff = SwiGLU(cfg)
+    x = torch.randn(2, 16, 64)
+    out = ff(x)
+    assert out.shape == (2, 16, 64)
+
+
+def test_swiglu_hidden_dim_rounded():
+    """Hidden dim is the multiple of 64 at/above 8/3*n_embd."""
+    from config import ModelConfig
+    from model import SwiGLU
+    # 1280: 8/3*1280 = 3413.33, rounded up to multiple of 64 = 3456
+    cfg = ModelConfig(vocab_size=100, n_layer=2, n_embd=1280, n_head=20, block_size=2048)
+    ff = SwiGLU(cfg)
+    assert ff.hidden == 3456
+
