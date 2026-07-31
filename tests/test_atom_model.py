@@ -112,3 +112,15 @@ def test_atom_gpt_param_count():
     # Target 655M; allow ±5% for tied-embedding / bias variance
     assert 620_000_000 < n < 690_000_000, f"got {n:,} params"
 
+
+def test_lattice_atom_config():
+    """Atom preset produces the expected arch."""
+    from config import lattice_atom_config
+    cfg = lattice_atom_config()
+    assert cfg.vocab_size == 16000
+    assert cfg.n_layer == 32
+    assert cfg.n_embd == 1280
+    assert cfg.n_head == 20
+    assert cfg.block_size == 2048
+    assert cfg.n_embd % cfg.n_head == 0  # head_dim divides cleanly
+

@@ -287,6 +287,24 @@ def lattice_air_config() -> ModelConfig:
     return ModelConfig(n_layer=20, n_embd=768, n_head=12)
 
 
+def lattice_atom_config() -> ModelConfig:
+    """
+    ~655M param preset (Lattice Atom — modern arch: RoPE + RMSNorm + SwiGLU).
+
+    Trained from scratch on 100B SmolLM-Corpus tokens (Cosmopedia-tilted).
+    VRAM @ bf16 + AdamW(fp32): ~12GB on A100 80GB.
+    """
+    return ModelConfig(
+        vocab_size=16000,
+        n_layer=32,
+        n_embd=1280,
+        n_head=20,
+        block_size=2048,
+        dropout=0.0,    # turn off at scale (standard for >100M pretraining)
+        bias=False,
+    )
+
+
 model_config = lattice_air_config()
 train_config = TrainConfig()
 generate_config = GenerateConfig()
