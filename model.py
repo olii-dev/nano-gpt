@@ -26,6 +26,30 @@ from config import ModelConfig, count_parameters, model_config
 
 
 # ---------------------------------------------------------------------------
+# RMSNorm — modern normalization (Llama/Qwen family)
+# ---------------------------------------------------------------------------
+
+class RMSNorm(nn.Module):
+    """
+    Root Mean Square Layer Normalization (Zhang & Sennrich 2019).
+
+    Like LayerNorm but without mean-subtraction and bias. Used by Llama,
+    Qwen, Mistral. Faster + fewer params than nn.LayerNorm.
+    """
+
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Cast to fp32 for the norm computation (stable at small magnitudes)
+        norm_x = x.float().pow(2).mean(dim=-1, keepdim=True)
+        x_normed = x.float() * torch.rsqrt(norm_x + self.eps)
+        return (x_normed * self.weight).to(x.dtype)
+
+
+# ---------------------------------------------------------------------------
 # Causal self-attention
 # ---------------------------------------------------------------------------
 
