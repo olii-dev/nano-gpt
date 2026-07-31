@@ -67,3 +67,14 @@ def test_swiglu_hidden_dim_rounded():
     ff = SwiGLU(cfg)
     assert ff.hidden == 3456
 
+
+def test_atom_block_residual():
+    """Block output shape matches input (residual blocks preserve shape)."""
+    from config import ModelConfig
+    from model import AtomTransformerBlock
+    cfg = ModelConfig(vocab_size=100, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    block = AtomTransformerBlock(cfg)
+    x = torch.randn(2, 16, 64)
+    out = block(x)
+    assert out.shape == (2, 16, 64)
+

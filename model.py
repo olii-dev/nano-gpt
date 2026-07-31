@@ -271,6 +271,22 @@ class TransformerBlock(nn.Module):
         return x
 
 
+class AtomTransformerBlock(nn.Module):
+    """One Atom layer: RMSNorm → RoPE-attn → residual, RMSNorm → SwiGLU → residual."""
+
+    def __init__(self, config: ModelConfig):
+        super().__init__()
+        self.norm_attn = RMSNorm(config.n_embd)
+        self.attn = RoPEAttention(config)
+        self.norm_ffn = RMSNorm(config.n_embd)
+        self.ffn = SwiGLU(config)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.norm_attn(x))
+        x = x + self.ffn(self.norm_ffn(x))
+        return x
+
+
 # ---------------------------------------------------------------------------
 # Full language model
 # ---------------------------------------------------------------------------
