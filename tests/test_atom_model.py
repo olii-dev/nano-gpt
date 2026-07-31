@@ -78,3 +78,37 @@ def test_atom_block_residual():
     out = block(x)
     assert out.shape == (2, 16, 64)
 
+
+def test_atom_gpt_forward():
+    """AtomGPT produces logits of shape (B, T, vocab) and a scalar loss."""
+    from config import ModelConfig
+    from model import AtomGPT
+    cfg = ModelConfig(vocab_size=256, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    model = AtomGPT(cfg)
+    x = torch.randint(0, 256, (2, 16))
+    y = torch.randint(0, 256, (2, 16))
+    out = model(x, y)
+    assert out.logits.shape == (2, 16, 256)
+    assert out.loss is not None and out.loss.dim() == 0
+
+
+def test_atom_gpt_generate():
+    """AtomGPT can autoregressively generate tokens."""
+    from config import ModelConfig
+    from model import AtomGPT
+    cfg = ModelConfig(vocab_size=256, n_layer=2, n_embd=64, n_head=4, block_size=32)
+    model = AtomGPT(cfg)
+    x = torch.randint(0, 256, (1, 4))
+    out = model.generate(x, max_new_tokens=8, temperature=1.0, top_k=10)
+    assert out.shape == (1, 12)  # 4 input + 8 new
+
+
+def test_atom_gpt_param_count():
+    """Full Atom config produces ~655M params (within 5%)."""
+    from config import lattice_atom_config
+    from model import AtomGPT
+    model = AtomGPT(lattice_atom_config())
+    n = sum(p.numel() for p in model.parameters())
+    # Target 655M; allow ±5% for tied-embedding / bias variance
+    assert 620_000_000 < n < 690_000_000, f"got {n:,} params"
+

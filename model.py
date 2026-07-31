@@ -416,6 +416,102 @@ class GPT(nn.Module):
         return idx
 
 
+class AtomGPT(nn.Module):
+    """
+    Modern decoder-only LM for Lattice Atom.
+
+    Like GPT but with: RoPE (no wpe), RMSNorm (not LayerNorm),
+    SwiGLU FFN (not GELU MLP), tied embeddings. Same family as Llama/Qwen.
+    """
+
+    def __init__(self, config: ModelConfig):
+        super().__init__()
+        self.config = config
+
+        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
+        self.drop = nn.Dropout(config.dropout)
+        self.h = nn.ModuleList([AtomTransformerBlock(config) for _ in range(config.n_layer)])
+        self.norm_f = RMSNorm(config.n_embd)
+        # Tied lm_head: shares weights with wte (saves params, standard)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head.weight = self.wte.weight
+
+        # Init all weights; scale residual projections by 1/sqrt(2*n_layer)
+        self.apply(self._init_weights)
+        for pn, p in self.named_parameters():
+            if pn.endswith("c_proj.weight") or pn.endswith("w_down.weight"):
+                torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
+
+    def _init_weights(self, module: nn.Module) -> None:
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(
+        self,
+        idx: torch.Tensor,
+        targets: torch.Tensor | None = None,
+    ) -> ModelOutput:
+        B, T = idx.size()
+        if T > self.config.block_size:
+            raise ValueError(f"Sequence length {T} exceeds block_size {self.config.block_size}")
+
+        x = self.drop(self.wte(idx))
+        for block in self.h:
+            x = block(x)
+        x = self.norm_f(x)
+        logits = self.lm_head(x)
+
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                ignore_index=-1,
+            )
+        return ModelOutput(logits=logits, loss=loss)
+
+    @torch.no_grad()
+    def generate(
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        top_p: float | None = None,
+    ) -> torch.Tensor:
+        for _ in range(max_new_tokens):
+            idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
+            logits = self(idx_cond).logits[:, -1, :] / max(temperature, 1e-8)
+
+            if idx.device.type == "mps":
+                logits = logits.float().cpu()
+
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = float("-inf")
+            if top_p is not None:
+                logits = _top_p_filter(logits, top_p)
+
+            probs = F.softmax(logits, dim=-1)
+            next_id = torch.multinomial(probs, num_samples=1).to(idx.device)
+            idx = torch.cat([idx, next_id], dim=1)
+        return idx
+
+
+def build_atom_model(config: ModelConfig | None = None) -> AtomGPT:
+    """Factory: build Atom and print param count."""
+    from config import lattice_atom_config
+    config = config or lattice_atom_config()
+    model = AtomGPT(config)
+    n = sum(p.numel() for p in model.parameters())
+    print(f"AtomGPT: {config.n_layer}L / {config.n_embd}D / {config.n_head}H · {n:,} params ({n/1e6:.1f}M)")
+    return model
+
+
 def _top_p_filter(logits: torch.Tensor, top_p: float) -> torch.Tensor:
     """Nucleus sampling: keep smallest set of tokens whose cumulative prob >= top_p."""
     sorted_logits, sorted_idx = torch.sort(logits, descending=True)
