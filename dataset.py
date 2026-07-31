@@ -67,6 +67,18 @@ DATASET_REGISTRY: dict[str, dict] = {
         "filename": "wikitext2.txt",
         "description": "Wikipedia articles (~13 MB raw) — better for 42M-param models",
     },
+    "smollm_corpus_atom": {
+        "source": "HuggingFaceTB/smollm-corpus",
+        "subsets": {
+            "cosmopedia_v2": "cosmopedia-v2",     # 50B target
+            "fineweb_edu": "fineweb-edu-dedup",   # 30B target
+            "python_edu": "python-edu",           # 20B target
+        },
+        "split": "train",
+        "streamable": True,        # use HF datasets streaming
+        "text_field": "text",
+        "description": "SmolLM-Corpus (Cosmopedia-tilted) — 100B tokens for Atom pretrain",
+    },
 }
 
 
