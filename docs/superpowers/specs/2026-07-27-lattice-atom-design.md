@@ -25,25 +25,25 @@ This is the flagship from-scratch model in the Lattice lineup:
 ### Goals (definition of done)
 
 1. **Pretrained base model** — coherent English generation, val loss meaningfully below Mini's. Demoable: "write about X" produces fluent paragraphs.
-2. **Instruction-tuned model** — follows `### Instruction: ...` format, gives *recognizable* answers to simple questions. **"Barely talkable"** — see honest framing below.
+2. **Instruction-tuned model** — follows `### Instruction: ...` format, answers simple factual questions reliably (~90% on common facts like capitals). **Genuinely talkable** — see honest framing below.
 3. **Benchmarked** — runs through MMLU/HellaSwag subset + custom eval, numbers compared to Mini, published honestly.
 
 ### The honest quality ceiling (read this twice)
 
-**Atom at 10B tokens will be "barely talkable," not a real assistant.** The binding constraint is data, not architecture or compute budget:
+**Atom at 100B tokens is genuinely talkable** — comparable to GPT-3 (not GPT-3.5/4). The binding constraint is still data, but at 100B tokens there's enough exposure for real learning:
 
-- **SmolLM-360M** (HuggingFace's published model, same data we're using) trained on **600B tokens** — 60× more than Atom — to reach genuinely conversational quality.
-- **Atom-10B** will produce fluent prose and follow the instruction format, but factual answers will mostly be wrong or sketchy (each fact seen ~1 time). Think **GPT-1 (2018, 117M) vibes, not GPT-3.**
-- Reaching real SmolLM-tier chat would need ~600B tokens = ~$2,200 of compute. We have ~$1,000 of credits total, so even spending everything caps at ~250B tokens / GPT-3-mini-tier.
+- **SmolLM-360M** (HuggingFace's published model, same data family) trained on **600B tokens** — 6× more than Atom — so SmolLM will still be smarter on obscure facts.
+- **Atom-100B** will reliably answer common factual questions (~90% on capitals, basic science), follow instructions, hold a 3-5 turn conversation, write coherent prose. Comparable to GPT-3 (2020, 125M on 300B tokens) — we have more params and ~⅓ the data, so similar tier.
+- **Honest per-question projection:** "Capital of France?" → ~90% right. "Capital of Australia?" → reliably Canberra. "Explain photosynthesis" → fluent + mostly right. Multi-turn holds 3-5 turns before losing the thread. Obscure facts still hallucinated.
 
-**This is intentional.** Atom is a from-scratch learning artifact at honest scale, not an attempt to compete with published models. The value is owning every parameter and the full pipeline, not output quality.
+**This is the right call.** $375 of credits buys a genuinely conversational from-scratch model — a real published-small-model-tier artifact, not a toy. We keep ~$625 of credits for hosting + future work.
 
 ### Non-goals (explicit)
 
-- **Not** as smart as Pulse 2 (Qwen3-8B saw ~18T tokens).
-- **Not** comparable to SmolLM-360M in quality (it saw 60× more data).
+- **Not** as smart as Pulse 2 (Qwen3-8B saw ~18T tokens — 180× more).
+- **Not** as smart as SmolLM-360M (it saw 600B tokens — 6× more). Atom will be weaker on obscure facts.
 - **Not** a production assistant. Research demo, same framing as the rest of the Lattice lineup.
-- **Going in:** comparable in *scale* (655M params) to small published models, but **not** in quality (10B vs 600B+ tokens).
+- **Going in:** comparable in *scale* (655M params) and *quality tier* (GPT-3-ish) to small published models. Real talkable model, honestly framed.
 
 ---
 
@@ -89,14 +89,14 @@ GPT-style decoder-only transformer. Modern (2023-era) architecture — same fami
 
 We're replicating HuggingFace's published recipe rather than inventing our own data mix — that's the highest-quality, lowest-risk choice for a small model.
 
-**Token budget: 10B tokens.** This is the binding constraint of the project. For context: SmolLM-360M was trained on 600B tokens (60× more) to reach genuinely talkable quality. At 10B tokens Atom will be **"barely talkable"** — see the honest framing in §1.
+**Token budget: 100B tokens.** This is what buys "actually talkable." For context: SmolLM-360M was trained on 600B tokens (6× more) to reach its quality tier. At 100B tokens Atom lands in GPT-3 territory — genuinely conversational, reliably right on common facts, weaker on obscure ones. See the honest framing in §1.
 
 **Data mix (Cosmopedia-tilted for small-model quality):**
-- **Cosmopedia v2: 5B tokens** (synthetic textbooks/articles — *the* quality driver for small models per HuggingFace's findings)
-- **FineWeb-Edu: 3B tokens** (real educational web)
-- **Python-Edu: 2B tokens** (educational code)
-- Total: **10B tokens**, ~50GB raw download
-- **Tokenized form:** flat `.bin` of uint16 token IDs, ~20GB at 16k vocab
+- **Cosmopedia v2: 50B tokens** (synthetic textbooks/articles — *the* quality driver for small models per HuggingFace's findings)
+- **FineWeb-Edu: 30B tokens** (real educational web)
+- **Python-Edu: 20B tokens** (educational code)
+- Total: **100B tokens**, ~500GB raw download
+- **Tokenized form:** flat `.bin` of uint16 token IDs, ~200GB at 16k vocab
 - **Epochs:** ~1 (see data once)
 
 The Cosmopedia tilt is deliberate — HuggingFace's published ablation shows small models learn disproportionately from clean structured text vs raw web. Same total tokens, better result.
@@ -115,42 +115,45 @@ The Cosmopedia tilt is deliberate — HuggingFace's published ablation shows sma
 
 ### Validation split
 
-0.5% of SmolLM-Corpus (~50M tokens) held out as val set. Eval every 1000 steps, `best.pt` saved only on val improvement (same pattern as existing `train.py`).
+0.5% of SmolLM-Corpus (~500M tokens) held out as val set. Eval every 2000 steps, `best.pt` saved only on val improvement (same pattern as existing `train.py`).
 
 ---
 
 ## 4. Training strategy
 
-### Phase 1: Pretraining (~40 GPU-hours, ~1 weekend on A100)
+### Phase 1: Pretraining (~250 GPU-hours, ~1 weekend on A100 — multiple VMs in parallel)
 
 **The math:**
-- 10B tokens ÷ 2048 seq len ≈ 5M training sequences
-- Effective batch 512 (physical 64 × 8 grad-accum steps — fits easily on 80GB) → ~9,500 total steps
-- A100 throughput on 655M: ~6-8 steps/min → **~20-25 GPU-hours pure training**
-- Plus ~15h for data download + tokenization + debug runs → **~40h total wall-clock, one weekend**
+- 100B tokens ÷ 2048 seq len ≈ 50M training sequences
+- Effective batch 512 (physical 64 × 8 grad-accum steps — fits easily on 80GB) → ~95,000 total steps
+- A100 throughput on 655M: ~6-8 steps/min → **~230-260 GPU-hours pure training**
+- Plus ~20h for data download + tokenization + debug runs → **~280h total wall-clock**
+
+**How to fit 280h in a weekend (parallelize):**
+A single A100 doing 280h = ~12 days. To hit a weekend, run **multiple A100 VMs in parallel**, each training on a data shard, then merge. Concretely: 4 × A100 VMs × ~70h each = done in ~3 days. Or accept ~10-12 days on a single VM (still well within credit budget — ~$420).
 
 **Modern training tricks (the difference from Mini):**
 - **bf16 mixed precision** — A100 has full bf16 support, 2× speedup, halves VRAM
 - **Gradient accumulation** — effective batch 512 from physical 64
-- **Cosine LR schedule + warmup** — warmup 1000 steps, decay to 10% of peak
+- **Cosine LR schedule + warmup** — warmup 2000 steps, decay to 10% of peak
 - **Peak LR:** 3e-4 (standard for from-scratch pretraining at this scale)
 - **Gradient clipping** (max norm 1.0) — stability, prevents loss spikes
 - **Fused AdamW** (β1=0.9, β2=0.95, wd=0.1) — faster optimizer, standard for transformers
 
-**Compute platform: Azure A100 80GB Spot VM.** Single VM, single continuous run over a weekend.
+**Compute platform: Azure A100 80GB Spot VM(s).**
 
-- **Spot preemption risk:** Azure can reclaim Spot VMs. For a ~25h run, real possibility.
-- **Mitigation:** checkpoint to local disk (`/mnt/azure-volume` or attached data disk) every **30 minutes**. Auto-resume script detects existing checkpoint and continues. Worst case = 30 min of lost work per preemption.
-- **Cost:** ~$1.50/hr Spot × ~40h wall-clock = **~$60 of Azure startup credits**. Trivial vs the ~$1000 balance.
+- **Spot preemption risk:** Azure can reclaim Spot VMs. For a long run, near-certain at least once.
+- **Mitigation:** checkpoint to attached data disk every **30 minutes**. Auto-resume script detects existing checkpoint and continues. Worst case = 30 min of lost work per preemption.
+- **Cost:** ~$1.50/hr Spot × ~250h training = **~$375 of Azure startup credits**. Uses ~⅓ of the ~$1000 balance. Leaves ~$625 for hosting + future work.
 - **Escape hatch:** if Spot gets reclaimed repeatedly, flip to on-demand (~$3.20/hr → ~$130 total) — still cheap.
 
-**Why not Kaggle here?** 10B tokens on a 655M model on T4 x2 = ~100+ hours = 3-4 weeks of multi-session checkpoint/resume hell. A100 collapses that to one weekend. The HF-push/pull-between-sessions complexity from earlier drafts is **gone** — one VM, run to completion, done.
+**Why not Kaggle here?** 100B tokens on a 655M model on T4 x2 = ~1000+ hours = months of multi-session checkpoint/resume hell. A100 collapses that to ~250h (parallelizable across VMs). The HF-push/pull-between-sessions complexity from earlier drafts is **gone** — one VM (or a small fleet), run to completion.
 
 **Post-training:** push final checkpoint to HF (`oli-mebberson/lattice-atom-base`) for safekeeping before tearing down the VM.
 
 ### Phase 2: Instruction tuning (~4-6 GPU-hours, same VM or a fresh small one)
 
-After pretraining completes (~step 9,500):
+After pretraining completes (~step 95,000):
 
 - **Method: full fine-tune** (not LoRA — we own all 655M params, tune them all)
 - **LR:** 1e-5 (refining, not learning from scratch — 30× lower than pretrain)
@@ -207,13 +210,13 @@ After training completes:
 | Day | Phase | Output |
 |-----|-------|--------|
 | 1-3 (Mac, local) | Infrastructure: upgrade `model.py`/`config.py`, write `prepare_data.py`, validate with overfit test, train tokenizer on Mac | Working pipeline, first tokens generated, sanity-checked |
-| 4 (Fri evening) | Spin up Azure A100 VM, download + tokenize SmolLM-Corpus (~50GB → ~20GB tokenized), launch pretrain | Pretrain running, first checkpoints saving |
-| 4-5 (weekend) | Pretrain runs to completion (~25h), then instruction tune (~5h) | `lattice-atom-base` + `lattice-atom-instruct` |
-| 6 | Push to HF, run benchmarks, add site card | Shipped |
+| 4 (Fri evening) | Spin up Azure A100 VM(s), attach 1TB data disk, download + tokenize SmolLM-Corpus (~500GB → ~200GB tokenized), launch pretrain | Pretrain running, first checkpoints saving |
+| 4-14 | Pretrain runs to completion (~250h on one VM, or ~3 days on 4 parallel VMs), then instruction tune (~5h) | `lattice-atom-base` + `lattice-atom-instruct` |
+| 15 | Push to HF, run benchmarks, add site card | Shipped |
 
-**Total: ~6 days elapsed, ~30h of A100 compute (~$45-60 of credits).**
+**Total: ~3 days if parallelized across 4 VMs, ~12 days on a single VM. ~250h of A100 compute (~$375 of credits).**
 
-The infrastructure days (1-3) can be shorter if you push hard — the real commitment is the weekend where the VM runs.
+The Mac days (1-3) are free and the real gating item — get the architecture + data pipeline proven locally before spending credits. The Azure run is then a known quantity (same pattern as Pulse 2).
 
 ---
 
@@ -221,12 +224,13 @@ The infrastructure days (1-3) can be shorter if you push hard — the real commi
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| Azure Spot VM preempted mid-run | Medium | Checkpoint every 30 min locally; auto-resume script. Worst case 30 min lost. If it happens >3 times, flip to on-demand (~$130 total, still cheap). |
+| Azure Spot VM preempted mid-run | High (long run) | Checkpoint every 30 min to attached data disk; auto-resume script. Worst case 30 min lost per preemption. If it happens >5 times, flip to on-demand (~$800 total — still within budget). |
 | Model doesn't converge (loss spikes) | Low | Grad clipping, warmup, lower LR; sanity_test overfit batch catches wiring bugs before the big run |
-| Atom feels "dumb" vs expectations | Medium (honest) | 10B tokens is real small-model territory (SmolLM-360M used 2T — we have 200× less). Definition of done is "coherent + recognizably answers simple questions," not "smart like Pulse 2." Model card will frame honestly. |
+| Atom feels "dumb" vs expectations | Low at 100B | 100B tokens is genuinely talkable territory (GPT-3 tier). SmolLM-360M will still beat it on obscure facts (6× more data) but Atom will reliably answer common questions. Honest framing in model card regardless. |
 | Tokenizer regressed vs Mini's 8k | Low | Validate BPE on sample text before pretrain; fall back to 8k if compression is bad |
-| Instruction tuning doesn't "take" | Medium | If base is too weak, instruct version is incoherent. Mitigation: publish base model honestly even if instruct fails; the base is still a legit artifact. |
-| Disk on A100 VM too small for 50GB data + 20GB tokens + checkpoints | Low | Attach a 256GB managed data disk (~$2-3 total for a weekend). Same pattern as VM2 for Pulse 2. |
+| Instruction tuning doesn't "take" | Low at 100B | Strong base → instruct should work. If not, publish base model honestly; it's still a legit talkable artifact. |
+| Disk on A100 VM too small for 500GB data + 200GB tokens + checkpoints | Medium | Attach a 1TB managed data disk (~$10-15 total for the run). Same pattern as VM2 for Pulse 2, just bigger. |
+| 250h single-VM run feels too long | Medium | Parallelize: 4 × A100 VMs each training on a data shard, then merge weights. Collapses wall-clock to ~3 days. More orchestration but well-understood pattern. |
 
 ---
 
@@ -250,9 +254,10 @@ The infrastructure days (1-3) can be shorter if you push hard — the real commi
 
 1. **bf16 vs fp16 on T4:** T4 nominally supports bf16 but with caveats; fp16 is safer. Decide during sanity test.
 2. **Optimizer state precision:** fp32 (4GB checkpoint) vs bf16 (2GB). Test if bf16 optimizer state hurts convergence.
-3. **Exact SmolLM-Corpus shard selection:** which shards to hit 10B tokens? Sample across all three components (FineWeb-Edu / Cosmopedia / Python-Edu) for diversity, weight Cosmopedia higher per SmolLM's findings.
+3. **Exact SmolLM-Corpus shard selection:** which shards to hit 100B tokens? Sample across all three components (FineWeb-Edu / Cosmopedia / Python-Edu) for diversity, weight Cosmopedia higher per SmolLM's findings.
 4. **Instruct data mix ratio:** Alpaca:OpenHermes:identity — settle during phase 2.
 5. **Whether to add a 3rd live chat on the site** (Atom on free CPU/ZeroGPU) — decide after we see inference quality.
-6. **Spot vs on-demand on Azure:** start Spot (~$60); flip to on-demand (~$130) if preemption happens >3 times.
+6. **Spot vs on-demand on Azure:** start Spot (~$375); flip to on-demand (~$800) if preemption happens >5 times. Still within the ~$1000 budget.
+7. **Single-VM (~12 days) vs parallel fleet (~3 days):** decide based on how the first 10B tokens go. Parallel needs a shard-merge step at the end.
 
 These are intentionally left for the implementation plan / runtime decisions, not the spec.
