@@ -305,10 +305,57 @@ def lattice_atom_config() -> ModelConfig:
     )
 
 
+@dataclass
+class AtomTrainConfig:
+    """Training settings for Lattice Atom (655M, 100B tokens, A100).
+
+    Key differences from TrainConfig:
+      - bf16 autocast (A100 native) instead of fp16 AMP
+      - Time-based checkpoints (every 30 min) for Spot preemption recovery
+      - Larger effective batch (512) — fits easily on 80GB
+      - Fused AdamW (faster on CUDA)
+      - Longer run (95k steps for 100B tokens)
+    """
+
+    # Data
+    dataset_name: str = "smollm_corpus_atom"  # registry key (added in Task 10)
+    val_split_ratio: float = 0.005           # 0.5% held out (~500M tokens of 100B)
+
+    # Optimization — effective batch 512 (physical 64 × accum 8)
+    batch_size: int = 64
+    grad_accum_steps: int = 8
+    use_bf16: bool = True                    # A100 bf16 autocast
+    learning_rate: float = 3e-4
+    weight_decay: float = 0.1
+    beta1: float = 0.9
+    beta2: float = 0.95
+    grad_clip: float = 1.0
+    fused_optimizer: bool = True             # torch.optim.AdamW(fused=True)
+
+    # Schedule — cosine with warmup, decay over full run
+    max_iters: int = 95000                   # ~100B tokens / (512 * 2048)
+    warmup_iters: int = 2000
+    lr_decay_iters: int = 95000
+    min_lr: float = 3e-5                     # 10% of peak
+
+    # Checkpointing — time-based for Spot preemption recovery
+    checkpoint_minutes: int = 30
+    checkpoint_dir: Path = field(default_factory=lambda: CHECKPOINT_DIR / "atom")
+
+    # Eval
+    eval_interval: int = 2000
+    eval_iters: int = 50
+    log_interval: int = 25
+
+    seed: int = 1337
+    device_prefer: DevicePrefer = "auto"
+
+
 model_config = lattice_air_config()
 train_config = TrainConfig()
 generate_config = GenerateConfig()
 finetune_config = FinetuneConfig()
+atom_train_config = AtomTrainConfig()
 
 
 def save_config(path: Path, **configs) -> None:

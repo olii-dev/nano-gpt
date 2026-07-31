@@ -124,3 +124,15 @@ def test_lattice_atom_config():
     assert cfg.block_size == 2048
     assert cfg.n_embd % cfg.n_head == 0  # head_dim divides cleanly
 
+
+def test_atom_train_config_defaults():
+    """AtomTrainConfig has bf16 enabled, 30-min checkpoints, cosine LR."""
+    from config import AtomTrainConfig
+    cfg = AtomTrainConfig()
+    assert cfg.use_bf16 is True
+    assert cfg.checkpoint_minutes == 30
+    assert cfg.batch_size * cfg.grad_accum_steps == 512  # effective batch
+    assert cfg.learning_rate == 3e-4
+    assert 0 < cfg.warmup_iters < cfg.lr_decay_iters
+    assert cfg.max_iters == cfg.lr_decay_iters  # decay over full run
+
