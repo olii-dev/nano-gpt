@@ -3,6 +3,7 @@ Sanity checks before a full training run.
 
 1. MPS detection — confirms Metal acceleration is active (not silent CPU fallback)
 2. Overfit test — train on a tiny repeated batch; loss should drop toward ~0
+3. Atom overfit test — same gate for the modern architecture (RoPE + RMSNorm + SwiGLU)
 
 Run:  python sanity_test.py
 """
@@ -15,7 +16,7 @@ import torch
 import torch.nn.functional as F
 
 from config import ModelConfig, get_device, device_summary
-from model import GPT
+from model import GPT, AtomGPT
 
 
 def check_device() -> torch.device:
@@ -134,13 +135,76 @@ def forward_backward_smoke(device: torch.device) -> bool:
     return True
 
 
+def overfit_atom_tiny_batch(device: torch.device, steps: int = 300) -> bool:
+    """
+    Memorize a single sequence with the modern Atom architecture.
+
+    Catches wiring bugs in RoPE, RMSNorm, SwiGLU, and tied embeddings
+    BEFORE spending A100 credits. Same gate as the GPT overfit, applied
+    to AtomGPT. If loss doesn't fall below 0.5, something is wrong.
+    """
+    print("=" * 60)
+    print("ATOM OVERFIT TEST (RoPE + RMSNorm + SwiGLU)")
+    print("=" * 60)
+
+    cfg = ModelConfig(
+        vocab_size=128,
+        n_layer=4,
+        n_embd=128,
+        n_head=4,
+        block_size=32,
+        dropout=0.0,
+    )
+    model = AtomGPT(cfg).to(device)
+    model.train()
+
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"  Tiny Atom config: {cfg.n_layer}L/{cfg.n_embd}D/{cfg.n_head}H, {n_params:,} params")
+
+    seq = torch.tensor(
+        [5, 12, 8, 30, 45, 2, 67, 89, 11, 22, 33, 44, 55, 66, 77, 88],
+        device=device,
+    )
+    x = seq[:-1].unsqueeze(0).repeat(4, 1)
+    y = seq[1:].unsqueeze(0).repeat(4, 1)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+    initial_loss = None
+    for step in range(1, steps + 1):
+        optimizer.zero_grad(set_to_none=True)
+        out = model(x, y)
+        loss = out.loss
+        assert loss is not None
+        loss.backward()
+        optimizer.step()
+
+        if step == 1:
+            initial_loss = loss.item()
+        if step % 50 == 0 or step == steps:
+            print(f"  step {step:4d}  loss = {loss.item():.6f}")
+
+    final_loss = loss.item()
+    passed = final_loss < 0.5
+    print()
+    print(f"  Initial loss: {initial_loss:.4f}")
+    print(f"  Final loss:   {final_loss:.6f}")
+    if passed:
+        print("  ✓ PASS — Atom can memorize (RoPE/RMSNorm/SwiGLU wired correctly)")
+    else:
+        print("  ✗ FAIL — loss did not drop; check RoPE/RMSNorm/SwiGLU wiring")
+    print()
+    return passed
+
+
 def main() -> None:
     device = check_device()
     ok1 = forward_backward_smoke(device)
     ok2 = overfit_tiny_batch(device)
+    ok3 = overfit_atom_tiny_batch(device)
 
-    if ok1 and ok2:
-        print("All sanity checks passed. Ready for tokenizer training + full run.")
+    if ok1 and ok2 and ok3:
+        print("All sanity checks passed (GPT + Atom). Ready for training.")
         sys.exit(0)
     else:
         print("Some checks failed.")
