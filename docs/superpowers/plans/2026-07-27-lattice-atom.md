@@ -4,7 +4,7 @@
 
 **Goal:** Build Lattice Atom — a ~655M parameter GPT-style language model trained entirely from scratch on 10B SmolLM-Corpus tokens, then instruction-tuned. Every parameter learned by us.
 
-**Architecture:** Modern GPT decoder (RoPE + RMSNorm + SwiGLU + tied embeddings), 32 layers / 1280 dim / 20 heads / 2048 context. Extends the existing `model.py`/`config.py`/`train.py` infrastructure — Mini still works as a regression test. Trained on an Azure A100 Spot VM over a weekend (~25h compute, ~$40 of credits), with 30-min local checkpoints for preemption recovery.
+**Architecture:** Modern GPT decoder (RoPE + RMSNorm + SwiGLU + tied embeddings), 32 layers / 1280 dim / 20 heads / 2048 context. Extends the existing `model.py`/`config.py`/`train.py` infrastructure — Mini still works as a regression test. Trained on Azure A100 Spot VM(s) — ~250h compute (~$375 of credits) for 100B tokens, either ~12 days on one VM or ~3 days across 4 parallel VMs. 30-min local checkpoints for preemption recovery.
 
 **Tech Stack:** PyTorch (bf16 autocast + fused AdamW), HuggingFace `datasets` + `tokenizers` for SmolLM-Corpus streaming and BPE, Azure A100 80GB Spot VM.
 
@@ -723,9 +723,9 @@ class AtomTrainConfig:
     fused_optimizer: bool = True             # torch.optim.AdamW(fused=True)
 
     # Schedule — cosine with warmup, decay to 10% of peak
-    max_iters: int = 9500                    # ~10B tokens / (512 * 2048)
-    warmup_iters: int = 1000
-    lr_decay_iters: int = 9500
+    max_iters: int = 95000                   # ~100B tokens / (512 * 2048)
+    warmup_iters: int = 2000
+    lr_decay_iters: int = 95000
     min_lr: float = 3e-5
 
     # Checkpointing — time-based for Spot preemption recovery
@@ -880,9 +880,9 @@ DATASET_REGISTRY: dict[str, dict] = {
     "smollm_corpus_atom": {
         "source": "HuggingFaceTB/smollm-corpus",
         "subsets": {
-            "cosmopedia_v2": "cosmopedia-v2",     # 5B target
-            "fineweb_edu": "fineweb-edu-dedup",   # 3B target
-            "python_edu": "python-edu",           # 2B target
+            "cosmopedia_v2": "cosmopedia-v2",     # 50B target
+            "fineweb_edu": "fineweb-edu-dedup",   # 30B target
+            "python_edu": "python-edu",           # 20B target
         },
         "split": "train",
         "streamable": True,        # use HF datasets streaming
@@ -990,14 +990,14 @@ Append to `tests/test_atom_data.py`:
 def test_token_budget_mix():
     """The Cosmopedia-tilted mix adds to 10B tokens."""
     from atom.prepare_data import TOKEN_BUDGET
-    assert TOKEN_BUDGET == 10_000_000_000
+    assert TOKEN_BUDGET == 100_000_000_000
     from atom.prepare_data import SUBSET_BUDGETS
     total = sum(SUBSET_BUDGETS.values())
     assert total == TOKEN_BUDGET
     # Cosmopedia-heaviest
-    assert SUBSET_BUDGETS["cosmopedia_v2"] == 5_000_000_000
-    assert SUBSET_BUDGETS["fineweb_edu"] == 3_000_000_000
-    assert SUBSET_BUDGETS["python_edu"] == 2_000_000_000
+    assert SUBSET_BUDGETS["cosmopedia_v2"] == 50_000_000_000
+    assert SUBSET_BUDGETS["fineweb_edu"] == 30_000_000_000
+    assert SUBSET_BUDGETS["python_edu"] == 20_000_000_000
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1022,11 +1022,11 @@ from pathlib import Path
 
 from config import tokenizer_dir_for, DATA_DIR
 
-TOKEN_BUDGET = 10_000_000_000
+TOKEN_BUDGET = 100_000_000_000
 SUBSET_BUDGETS = {
-    "cosmopedia_v2": 5_000_000_000,
-    "fineweb_edu":   3_000_000_000,
-    "python_edu":    2_000_000_000,
+    "cosmopedia_v2": 50_000_000_000,
+    "fineweb_edu":   30_000_000_000,
+    "python_edu":    20_000_000_000,
 }
 SUBSET_TO_HF_CONFIG = {
     "cosmopedia_v2": "cosmopedia-v2",
@@ -1370,7 +1370,7 @@ git commit -m "Atom: add train_atom() with bf16, time-based ckpts, auto-resume"
 
 ## Task 13: Azure A100 VM setup + pretrain launch
 
-Run the actual pretrain. This is the expensive (~$40) step — only after Tasks 1–12 pass on Mac.
+Run the actual pretrain. This is the expensive (~$375) step — only after Tasks 1–12 pass on Mac.
 
 **Files:**
 - Create: `atom/azure_train.sh`
@@ -1395,12 +1395,12 @@ if [ ! -f tokenizer/atom/tokenizer.json ]; then
   python -m atom.train_tokenizer --sample-tokens 500_000_000
 fi
 
-# 2. Prepare data (~5-8h: 50GB download + tokenize to ~20GB bins)
+# 2. Prepare data (~30-50h: 500GB download + tokenize to ~200GB bins)
 if [ ! -f data/atom/manifest.json ]; then
   python -m atom.prepare_data --out-dir data/atom
 fi
 
-# 3. Pretrain (~25h, checkpoints every 30 min)
+# 3. Pretrain (~250h on one VM, or ~70h each across 4 parallel VMs, checkpoints every 30 min)
 # Auto-resumes from latest checkpoint in checkpoints/atom/
 nohup python train.py --atom > logs/atom_pretrain.log 2>&1 &
 echo "Pretrain launched in background. Logs: logs/atom_pretrain.log"
@@ -1438,7 +1438,7 @@ bash atom/azure_train.sh
 
 Watch `tail -f logs/atom_pretrain.log` — confirm loss decreasing and first checkpoint lands at `checkpoints/atom/ckpt_XXXXXX.pt` within 30 min.
 
-- [ ] **Step 7: Let it run (~25h), then push final to HF**
+- [ ] **Step 7: Let it run (~250h single-VM, or ~70h × 4 parallel), then push final to HF**
 
 After completion, run `python -m atom.upload` (Task 15) to push `final.pt` → `oli-mebberson/lattice-atom-base`.
 
