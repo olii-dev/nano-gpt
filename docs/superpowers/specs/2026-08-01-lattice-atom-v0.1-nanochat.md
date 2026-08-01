@@ -26,22 +26,34 @@ Atom is the from-scratch flagship: bigger and more useful than Mini, fully ours 
 
 ### Goals (definition of done)
 
-1. **Pretrained base model** — coherent English generation at GPT-2 tier (160M trained at 260 tokens/parameter, solidly overtrained per SmolLM's small-model thesis).
+1. **Pretrained base model** — coherent English generation with modern small-model conversational capability (100–200M parameter class). 160M trained at 260 tokens/parameter, solidly overtrained per SmolLM's small-model thesis.
 2. **Instruction-tuned model** — follows chat format, holds a short conversation, answers common factual questions recognizably.
 3. **Optionally: RL-tuned model** — if nanochat's `chat_rl.py` (GRPO) lands cleanly, a third variant with sharper responses. (Stretch goal, not blocking.)
-4. **Benchmarked** — runs through nanochat's eval (DCLM CORE, bits/byte), numbers compared honestly to Mini and to GPT-2-equivalent published numbers.
+4. **Benchmarked** — runs through nanochat's eval (DCLM CORE, bits/byte), numbers compared honestly to Mini and to published small-model numbers.
 5. **Published** — base + instruct on HuggingFace as `oli-mebberson/lattice-atom-base` and `oli-mebberson/lattice-atom-instruct`, honest model cards, MIT license (matching nanochat).
+
+### Release criteria for v0.1 (all must pass to ship)
+
+A checklist, not vibes. v0.1 ships only when every box is ticked:
+
+- [ ] **RC1 — Training complete:** pretrain ran to completion (loss converged, no NaNs), checkpoint saved. SFT ran to completion. (RL optional — see RC-stretch below.)
+- [ ] **RC2 — Evals run and recorded:** nanochat's `base_eval.py` and `chat_eval.py` both executed; DCLM CORE score + bits-per-byte captured for the base model; chat eval captured for the instruct model. Numbers written to the model card and the `/benchmarks` page.
+- [ ] **RC3 — SFT chat quality gate:** the instruct model, tested with NO system prompt, can (a) follow a `### Instruction:`-style prompt, (b) answer "What is the capital of France?" with a response containing "Paris," (c) answer "Who are you?" with a response containing "Lattice." If any of these fail, SFT needs more data or steps before shipping.
+- [ ] **RC4 — Lattice identity measurable:** the identity eval from §6 passes (see that section for the bar).
+- [ ] **RC5 — Model card honest + complete:** HuggingFace model card states param count, training data, FLOPs, eval numbers, the nanochat base, MIT license, and an honest "modern small-model class, not frontier" framing. No overselling.
+- [ ] **RC6 — HuggingFace release:** `lattice-atom-base` and `lattice-atom-instruct` pushed, public, downloadable, loadable with a standard `from_pretrained` call (verified by loading on Mac).
+- [ ] **RC-stretch — RL variant (optional):** if GRPO ran and improved chat quality measurably, publish `lattice-atom-rl`. Not blocking for v0.1.
 
 ### Non-goals (explicit, v0.1)
 
 - **Not** modifying nanochat's architecture. Run it unmodified first; SwiGLU/GQA experiments are v0.2.
 - **Not** 655M. That's a v0.2 scale-up once the pipeline is proven. (The 655M @ 35B-token plan from the old spec is parked — its 53 tokens/param ratio was starving the model.)
-- **Not** competing with SmolLM-360M on quality (they had 6× our data + 4× our params).
+- **Not** competing with frontier models. Atom v0.1 targets modern small-model conversational capability (100–200M class), not GPT-4-tier or even SmolLM-360M-tier quality.
 - **Not** a production assistant. Research demo, same framing as the rest of the Lattice lineup.
 
 ### Honest quality expectation
 
-**GPT-2-tier talkable.** 160M params trained at ~260 tokens/param (vs GPT-3 125M at 2400:1, SmolLM-135M at 4444:1). Each parameter is well-fed; the model will produce coherent English, follow chat format, and answer simple questions. It will not be as smart as SmolLM-360M (more data + params) or Pulse 2 (it's a full Qwen3-8B). The value is: every parameter trained by us, full pipeline owned, ~$111 total cost.
+**Modern small-model conversational capability (100–200M parameter class), not frontier.** 160M params trained at ~260 tokens/param (vs GPT-3 125M at 2400:1, SmolLM-135M at 4444:1). Each parameter is well-fed; the model will produce coherent English, follow chat format, and answer simple questions. It sits in the same capability class as SmolLM-135M / early small open models — genuinely conversational within its size tier, not competing with larger or frontier models. The value is: every parameter trained by us, full pipeline owned, ~$111 total cost.
 
 ---
 
@@ -102,7 +114,19 @@ We use nanochat's `gpt.py` as-is for v0.1. For reference, it's already modern:
 - **FineWeb-Edu** (real educational web)
 - **Python-Edu** (educational code)
 
-The exact mix ratio is determined by nanochat's 4e19 FLOP budget at 160M params (~42B tokens total). We weight Cosmopedia heaviest per HuggingFace's published ablation. nanochat's data loader handles streaming + tokenization; we configure the source.
+### Why 42B tokens at 160M (not "just follow nanochat defaults")
+
+This is a deliberate decision, not a default inherited blindly. Three reasons converge on ~42B:
+
+1. **The tokens-per-parameter ratio is what makes small models smart.** SmolLM's published thesis (and HuggingFace's ablations) show small models need *massive overtraining* — each parameter should see 100×–1000× its count in tokens. At 160M params × 260 tokens/param = 42B, we land at 260:1, which is solidly in the "well-fed" regime (compare: our parked 655M @ 35B plan was 53:1 — starving). Cutting tokens below 42B pushes us toward Chinchilla-optimal (20:1), which is *undertrained* for a small model. Going above 42B means more FLOPs means more cost — diminishing returns past ~300:1 at this scale.
+
+2. **The FLOPs budget is the binding constraint, and 4e19 is the proven point.** nanochat's 4e19 FLOP speedrun is Karpathy's published, tested recipe for producing a GPT-2-class model. At 160M params, 4e19 FLOPs *is* 42B tokens (FLOPs = 6 × params × tokens). We're not picking 42B arbitrarily — we're picking the proven FLOPs budget, and 42B is what that budget buys at our param count. Spending fewer FLOPs would undertrain; more would cost more for marginal gain.
+
+3. **SmolLM-Corpus (not nanochat's default ClimbMix) because it's purpose-built for this exact regime.** nanochat ships with NVIDIA ClimbMix as its default pretraining data. We override to SmolLM-Corpus because HuggingFace built and ablated it *specifically* for 100M–1B models — Cosmopedia's synthetic textbooks are the documented quality driver for small models. ClimbMix is good; SmolLM-Corpus is *tuned for our size class*. The Cosmopedia-heavy tilt (vs equal mix) follows HuggingFace's published finding that small models learn disproportionately from clean, structured text.
+
+**Net:** 42B tokens is the intersection of (a) the proven 4e19 FLOP recipe, (b) the right tokens/param ratio for a 160M, and (c) the dataset engineered for this scale. It's a reasoned choice, not a default.
+
+nanochat's data loader handles streaming + tokenization; we configure the source to SmolLM-Corpus with the Cosmopedia-tilted mix.
 
 ### Tokenizer
 
@@ -156,7 +180,47 @@ All well within the ~$1000 balance. The 8×A100 Spot path is the default; we fal
 
 ---
 
-## 6. What we build vs. configure
+## 6. Lattice identity evaluation
+
+The SFT identity layer is a *product requirement*, not a hope — so it has to be measurable. This is the direct lesson from Pulse 2, where we discovered post-hoc that the "fine-tune" did nothing for identity and the system prompt was doing 100% of the work. Atom v0.1 must not repeat that: we measure identity ownership explicitly, before shipping.
+
+### The identity eval (must pass before RC4)
+
+Run the instruct model with **NO system prompt** (the hard condition — this isolates what the model intrinsically "is," not what it's been told to be in-context). Score a fixed set of identity prompts:
+
+**Prompts (10):**
+1. "Who are you?"
+2. "What is your name?"
+3. "Who made you?"
+4. "Who created you?"
+5. "Are you ChatGPT?"
+6. "Are you made by OpenAI?"
+7. "What company built you?"
+8. "Spell your name."
+9. "Are you GPT-4?"
+10. "Introduce yourself."
+
+**Pass criteria per prompt:**
+- ✅ Response contains "Lattice" (case-insensitive)
+- ❌ Response contains a forbidden brand: `OpenAI`, `ChatGPT`, `GPT-4`, `GPT-3`, `Qwen`, `Alibaba`, `Google`, `Anthropic`, `Claude`, `nanochat`, `Karpathy`
+- ❌ Response is incoherent or doesn't answer the question
+
+**Bar to ship (RC4):** ≥8/10 prompts pass. If <8, the SFT identity data needs more examples or more steps — iterate before shipping. This is the gate that prevents another Pulse 2 (where identity was an unmeasured assumption).
+
+### Why "no system prompt" is the test
+
+This is the crux. Pulse 2 said "I am Lattice Pulse" *when given a system prompt saying so* — but with no prompt it said "I am Qwen, made by Alibaba" (we benchmarked this). A system prompt is just in-context instruction-following; it doesn't mean the model *is* the brand. Atom v0.1 trains all parameters from scratch, so SFT genuinely reshapes identity. The "no system prompt" test proves whether that worked. If Atom passes without a prompt, it owns the identity in a way Pulse 2 structurally could not.
+
+### Also measured (for the model card, not blocking)
+
+- Identity *with* the Lattice system prompt (should be ~10/10 — confirms the prompt path also works)
+- A factual spot-check set (capitals, basic math) — to confirm SFT didn't catastrophically forget pretraining knowledge
+
+These numbers go in the model card and on the `/benchmarks` page, same honest pattern as Pulse 2's benchmark.
+
+---
+
+## 7. What we build vs. configure
 
 This is the key mental shift from the old spec. We write very little code; we configure nanochat.
 
@@ -198,7 +262,7 @@ The old `atom/` package + custom `model.py` extensions stay in the repo as refer
 
 ---
 
-## 7. Deployment & hosting
+## 8. Deployment & hosting
 
 **HuggingFace (after training):**
 - `oli-mebberson/lattice-atom-base` — pretrained weights, MIT license
@@ -215,7 +279,7 @@ The old `atom/` package + custom `model.py` extensions stay in the repo as refer
 
 ---
 
-## 8. Timeline
+## 9. Timeline
 
 | Day | Phase | Output |
 |-----|-------|--------|
@@ -230,7 +294,7 @@ The Mac day is the real gating item — get the config + data right before spend
 
 ---
 
-## 9. Risks & honest mitigations
+## 10. Risks & honest mitigations
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
@@ -244,24 +308,26 @@ The Mac day is the real gating item — get the config + data right before spend
 
 ---
 
-## 10. What success looks like
+## 11. What success looks like
 
-**Minimum viable success (v0.1 ship):**
-- A pretrained ~160M model that generates coherent English (GPT-2 tier)
-- An SFT'd version that follows chat format and answers simple questions — and says "Lattice Atom" when asked who it is, *without a system prompt*
-- Uploaded to HF with honest model cards
+**v0.1 ships when all release criteria (§1, RC1–RC6) pass.** That is the definition of done — not vibes. Concretely, a shipped v0.1 means:
+
+- A pretrained ~160M model that generates coherent English (modern small-model class)
+- An SFT'd version that follows chat format, answers "capital of France" → Paris, and says "Lattice" when asked who it is — *without a system prompt* (the identity eval §6 ≥8/10)
+- nanochat evals (DCLM CORE, bpb) run and recorded in the model card
+- Uploaded to HF with honest model cards, loadable with `from_pretrained`
 - A new card on the Lattice site
 
-**Full success:**
-- All of the above PLUS the GRPO RL variant
-- Eval numbers (DCLM CORE, bpb) published on the `/benchmarks` page alongside Pulse 2
+**Full success (stretch):**
+- All of the above PLUS the GRPO RL variant (RC-stretch)
+- Eval numbers published on the `/benchmarks` page alongside Pulse 2
 - A 3rd live chat model on the site (Atom on free hosting)
 
-**The honest framing:** Atom v0.1 is a from-scratch model trained on nanochat's proven recipe with our data and identity choices. It's GPT-2-tier talkable. Every parameter is trained by us. Total cost ~$111. That's the pitch.
+**The honest framing:** Atom v0.1 is a from-scratch model trained on nanochat's proven recipe with our data and identity choices. It targets modern small-model conversational capability (100–200M class), not frontier models. Every parameter is trained by us. Total cost ~$111. That's the pitch.
 
 ---
 
-## 11. v0.2+ (explicitly deferred)
+## 12. v0.2+ (explicitly deferred)
 
 Things we're *not* doing in v0.1 but explicitly planning:
 
