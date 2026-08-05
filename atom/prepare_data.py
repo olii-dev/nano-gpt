@@ -15,11 +15,11 @@ from pathlib import Path
 
 from config import tokenizer_dir_for, DATA_DIR
 
-TOKEN_BUDGET = 100_000_000_000
+TOKEN_BUDGET = 35_000_000_000
 SUBSET_BUDGETS = {
-    "cosmopedia_v2": 50_000_000_000,
-    "fineweb_edu":   30_000_000_000,
-    "python_edu":    20_000_000_000,
+    "cosmopedia_v2": 17_500_000_000,
+    "fineweb_edu":   10_500_000_000,
+    "python_edu":     7_000_000_000,
 }
 SUBSET_TO_HF_CONFIG = {
     "cosmopedia_v2": "cosmopedia-v2",

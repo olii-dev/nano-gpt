@@ -333,9 +333,9 @@ class AtomTrainConfig:
     fused_optimizer: bool = True             # torch.optim.AdamW(fused=True)
 
     # Schedule — cosine with warmup, decay over full run
-    max_iters: int = 95000                   # ~100B tokens / (512 * 2048)
-    warmup_iters: int = 2000
-    lr_decay_iters: int = 95000
+    max_iters: int = 33379                   # ~35B tokens / (512 * 2048)
+    warmup_iters: int = 1000
+    lr_decay_iters: int = 33379
     min_lr: float = 3e-5                     # 10% of peak
 
     # Checkpointing — time-based for Spot preemption recovery
@@ -343,7 +343,7 @@ class AtomTrainConfig:
     checkpoint_dir: Path = field(default_factory=lambda: CHECKPOINT_DIR / "atom")
 
     # Eval
-    eval_interval: int = 2000
+    eval_interval: int = 1000
     eval_iters: int = 50
     log_interval: int = 25
 

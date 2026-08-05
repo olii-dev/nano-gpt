@@ -366,6 +366,59 @@ def get_batch(
     return x, y
 
 
+def get_atom_batch_iterator(
+    data_dir: Path,
+    block_size: int,
+    batch_size: int,
+    device: torch.device,
+    seed: int = 1337,
+):
+    """Infinite generator yielding (x, y) random batches from Atom's flat .bin shards.
+
+    Memory-maps each train_*.bin / val_*.bin, concatenates them virtually into one
+    token stream, then samples batch_size independent random chunks per step
+    (true SGD — not one chunk repeated). Same pattern as get_batch(), scaled up.
+
+    Returns (train_iter, val_iter) — both infinite generators.
+    """
+    import numpy as np
+
+    train_paths = sorted(data_dir.glob("train_*.bin"))
+    val_paths = sorted(data_dir.glob("val_*.bin"))
+    if not train_paths:
+        raise FileNotFoundError(f"No train_*.bin in {data_dir} — run prepare_data first")
+
+    def _make_iter(paths, batch_seed: int):
+        arrays = [np.memmap(p, dtype=np.uint16, mode="r") for p in paths]
+        # Offsets into the virtual concatenated stream: each array starts where
+        # the previous one ended. This lets us sample a uniform random position
+        # across ALL shards with one randint, then map back to (array, local_idx).
+        bounds = np.cumsum([0] + [len(a) for a in arrays])
+        total_len = int(bounds[-1])
+        max_start = total_len - block_size - 1
+        if max_start <= 0:
+            raise ValueError(f"Token stream too short ({total_len}) for block_size {block_size}")
+
+        gen = torch.Generator().manual_seed(batch_seed)
+
+        while True:
+            xs, ys = [], []
+            for _ in range(batch_size):
+                # Sample a random global position, find which array it's in
+                start = torch.randint(0, max_start + 1, (1,), generator=gen).item()
+                arr_idx = int(np.searchsorted(bounds, start, side="right") - 1)
+                local_start = start - bounds[arr_idx]
+                arr = arrays[arr_idx]
+                chunk = arr[local_start : local_start + block_size + 1].astype(np.int64)
+                xs.append(chunk[:-1])
+                ys.append(chunk[1:])
+            x = torch.tensor(np.stack(xs), dtype=torch.long, device=device)
+            y = torch.tensor(np.stack(ys), dtype=torch.long, device=device)
+            yield x, y
+
+    return _make_iter(train_paths, seed), _make_iter(val_paths, seed + 1)
+
+
 # ---------------------------------------------------------------------------
 # CLI — prepare data standalone
 # ---------------------------------------------------------------------------
