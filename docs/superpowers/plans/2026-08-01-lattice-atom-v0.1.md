@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-08-01-lattice-atom-v0.1-nanochat.md`
 
 **Key constraints discovered during research (read these before starting):**
+- **NO MODEL EXECUTION ON MAC.** The Mac is for writing code + git only. The earlier crash (full 655M model on MPS) will not repeat. All `uv sync`, imports, smoke tests, training, and validation happen on the Azure VM. This is non-negotiable.
 - nanochat uses **`uv`**, not pip/requirements.txt. Install with `uv sync --extra gpu`.
 - nanochat's pretrain data source is **hardcoded** in `nanochat/dataset.py` (ClimbMix). Pointing at SmolLM-Corpus means editing that file. It downloads raw parquet over HTTP — `transformers`/`datasets` are NOT dependencies.
 - There is **no published depth→params table**. "~160M" must be verified empirically by instantiating the model and checking `model.num_scaling_params()`. Formula: `n_layer=depth`, `n_embd=ceil(depth*64/128)*128`, `n_head=n_embd/128`, plus 32768-wide embeddings.
@@ -63,21 +64,11 @@ which uv || curl -LsSf https://astral.sh/uv/install.sh | sh
 uv --version
 ```
 
-- [ ] **Step 3: Install nanochat deps (CPU/MPS for Mac-side validation)**
+- [ ] **Step 3: Do NOT install deps or run anything on Mac.**
 
-```bash
-cd nanochat
-uv sync --extra cpu --group dev
-```
+All nanochat execution (deps install, imports, training, smoke tests) happens on the Azure VM. The Mac is for writing code and git only. The earlier crash happened from running a model on Mac — we do not repeat that. `uv sync` happens on the VM in Task 10.
 
-Expected: `uv.lock` resolves, torch 2.9.1 installs. Verify: `uv run python -c "import torch; print(torch.__version__)"`.
-
-- [ ] **Step 4: Verify nanochat imports + CPU smoke runs**
-
-```bash
-cd nanochat
-uv run python -c "from nanochat.gpt import GPT, GPTConfig; print('nanochat imports OK')"
-```
+- [ ] **Step 4: Commit submodule only (no deps installed)**
 
 - [ ] **Step 5: Commit submodule + note install method**
 
@@ -102,7 +93,8 @@ nanochat has no published sizing table — we measure. Formula from
 base_train.py:build_model_meta: n_layer=depth, n_embd=ceil(depth*64/128)*128,
 n_head=n_embd/128, vocab=32768.
 
-Usage:  cd nanochat && uv run python ../lattice_atom/depth_probe.py
+Usage (ON THE AZURE VM, not Mac — instantiates models):
+  cd nanochat && uv run python ../lattice_atom/depth_probe.py
 """
 import sys, math
 sys.path.insert(0, ".")
@@ -127,12 +119,9 @@ for depth in [18, 20, 22, 24, 26, 28, 30, 32]:
     print(f"{depth:>5} {cfg.n_embd:>6} {cfg.n_head:>6} {n:>12,} ({n/1e6:.1f}M)")
 ```
 
-- [ ] **Step 2: Run the probe**
+- [ ] **Step 2: Write the script on Mac, run it on the VM only**
 
-```bash
-cd nanochat
-uv run python ../lattice_atom/depth_probe.py
-```
+Write the file locally (it's just text). The actual probe run happens on the Azure VM in Task 10, after `uv sync`. Do NOT run it on Mac — it instantiates GPT models.
 
 - [ ] **Step 3: Pick the depth closest to 160M, record it**
 
@@ -174,7 +163,7 @@ Usage (Mac, before the Azure run — produces shards we sync to the VM):
 # Implementation notes:
 # 1. Load nanochat's tokenizer (scripts/tok_train.py output or prebuilt).
 # 2. Stream HuggingFaceTB/smollm-corpus via raw HTTP (datasets lib NOT a dep
-#    of nanochat — but we CAN use it in this standalone prep script on Mac,
+#    of nanochat — but we CAN use it in this standalone prep script on the VM,
 #    since this runs outside nanochat's dep tree).
 # 3. For each subset (cosmopedia-v2, fineweb-edu-dedup, python-edu) at its
 #    budget ratio, tokenize rows and accumulate into parquet shards of ~100M
@@ -363,32 +352,25 @@ git commit -m "Atom: speedrun script (pretrain + SFT + eval, Lattice config)"
 
 ---
 
-## Task 8: Mac-side validation (the cheap gate before Azure)
+## Task 8: Static validation on Mac (NO model execution)
 
-**CRITICAL:** This is where the earlier crash happened. We do NOT load the full model on Mac. We validate config + data + tiny-CPU training only.
+**CRITICAL — READ THIS:** We do NOT run any model code, training, smoke tests, or even `uv sync` on Mac. The earlier crash happened from running a model locally and it will not happen again. This task is **static review only** — reading files, checking imports exist, no execution.
 
-- [ ] **Step 1: Run nanochat's own CPU smoke (depth 6)**
+- [ ] **Step 1: Static review of all written code**
 
-```bash
-cd nanochat
-bash runs/runcpu.sh
-```
+Read through every file we wrote in Tasks 1–7 (depth_probe.py, prepare_smollm_parquet.py, dataset_smollm.py, lattice_identity.py + jsonl, identity_eval.py, atom_speedrun.sh, AZURE_ATOM.md). Check for obvious bugs, typos, wrong paths. No execution.
 
-This is nanochat's own tiny CPU run (~30 min on M3 Max, depth 6, ~30M params). Proves the framework works on our Mac. **Do not run anything larger on Mac.**
-
-- [ ] **Step 2: Verify our data prep produces valid shards**
-
-Run `prepare_smollm_parquet.py --shards 1 --smoke` (from Task 3), confirm output loads.
-
-- [ ] **Step 3: Verify identity task class + eval script import cleanly**
+- [ ] **Step 2: Verify files are committed and pushed**
 
 ```bash
-cd nanochat
-uv run python -c "import sys; sys.path.insert(0,'../lattice_atom/tasks'); from lattice_identity import LatticeIdentity; print('OK')"
-uv run python ../lattice_atom/identity_eval.py --help
+git status   # working tree clean
+git log --oneline -10  # all task commits present
+git push     # GitHub is current — the VM clones from here
 ```
 
-- [ ] **Step 4: Commit any fixes from validation**
+- [ ] **Step 3: All runtime validation moves to the VM (Task 10)**
+
+The depth probe, data prep smoke test, nanochat CPU smoke, identity task import check — all of these run on the Azure VM after `uv sync`, NOT on Mac. Task 10 gains these steps.
 
 ---
 
@@ -412,7 +394,7 @@ git commit -m "Atom: Azure 8xA100 run guide"
 
 ## Task 10: Provision VM + sync data + launch pretrain
 
-**This is the ~$111 step. Only after Tasks 1–9 pass on Mac.**
+**This is the ~$111 step. Only after Tasks 1–9 are written and committed (static review only, no execution on Mac).**
 
 - [ ] **Step 1: Provision 8×A100 80GB Spot VM (portal — user does this)**
 
@@ -424,22 +406,36 @@ git clone --recurse-submodules https://github.com/olii-dev/nano-gpt.git
 cd nano-gpt/nanochat && uv sync --extra gpu
 ```
 
-- [ ] **Step 3: Produce full SmolLM parquet shards (~50 shards, several hours download)**
+- [ ] **Step 3: Runtime validation (this is what we used to do on Mac — now on VM)**
+
+```bash
+cd ~/nano-gpt/nanochat
+# Verify imports work
+uv run python -c "from nanochat.gpt import GPT, GPTConfig; print('nanochat imports OK')"
+# Verify our identity task class loads
+uv run python -c "import sys; sys.path.insert(0,'../lattice_atom/tasks'); from lattice_identity import LatticeIdentity; print('identity task OK')"
+# Run the depth probe (instantiates models — this is fine on the A100 VM)
+uv run python ../lattice_atom/depth_probe.py
+```
+
+Record the depth closest to 160M, update `atom_speedrun.sh`'s `DEPTH` if needed.
+
+- [ ] **Step 4: Produce full SmolLM parquet shards (~50 shards, several hours download)**
 
 ```bash
 uv run python ../lattice_atom/prepare_smollm_parquet.py --shards 50
 ```
 
-- [ ] **Step 4: Launch the speedrun**
+- [ ] **Step 5: Launch the speedrun**
 
 ```bash
 export WANDB_RUN=lattice-atom-v0.1
 bash ../lattice_atom/runs/atom_speedrun.sh
 ```
 
-- [ ] **Step 5: Monitor first 30 min — confirm loss decreasing, first checkpoint saved**
+- [ ] **Step 6: Monitor first 30 min — confirm loss decreasing, first checkpoint saved**
 
-- [ ] **Step 6: Let it run to completion (~9h pretrain + ~2h SFT)**
+- [ ] **Step 7: Let it run to completion (~9h pretrain + ~2h SFT)**
 
 ---
 
@@ -476,7 +472,7 @@ uv run python ../lattice_atom/upload.py base
 uv run python ../lattice_atom/upload.py instruct
 ```
 
-- [ ] **Step 3: Verify loadable on Mac (RC6)**
+- [ ] **Step 3: Verify loadable on the VM (RC6)**
 
 ```bash
 # Load with from_pretrained, generate a sample
