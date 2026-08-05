@@ -432,8 +432,155 @@ def train(
 # CLI
 # ---------------------------------------------------------------------------
 
+def save_atom_checkpoint(
+    path: Path,
+    model,
+    optimizer: torch.optim.Optimizer,
+    step: int,
+    best_val_loss: float,
+    elapsed_minutes: float,
+) -> None:
+    """Atom checkpoint: time-based, includes step + elapsed time for resume."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "step": step,
+            "best_val_loss": best_val_loss,
+            "elapsed_minutes": elapsed_minutes,
+            "model_state_dict": {k: v.cpu() for k, v in model.state_dict().items()},
+            "optimizer_state_dict": optimizer.state_dict(),
+            "model_config": model.config.__dict__,
+        },
+        path,
+    )
+    print(f"  [ckpt] saved → {path} (step {step}, {elapsed_minutes:.0f} min)")
+
+
+def train_atom(
+    tcfg=None,
+    max_iters_override: int | None = None,
+    data_dir: Path | None = None,
+) -> None:
+    """Pretrain Lattice Atom with bf16 + 30-min checkpoints + auto-resume.
+
+    Reuses get_lr (cosine schedule), the AtomGPT model, and get_atom_batch_iterator.
+    Designed to run on Azure A100; auto-resumes from the latest checkpoint in
+    tcfg.checkpoint_dir if Spot preemption killed a prior run.
+    """
+    from config import AtomTrainConfig, lattice_atom_config, DATA_DIR, LOG_DIR
+    from model import build_atom_model
+    from dataset import get_atom_batch_iterator
+
+    tcfg = tcfg or AtomTrainConfig()
+    if max_iters_override is not None:
+        tcfg.max_iters = max_iters_override
+    data_dir = data_dir or (DATA_DIR / "atom")
+
+    device = get_device(tcfg.device_prefer)
+    print(f"Device: {device_summary(device)}")
+    print(f"Training Atom for {tcfg.max_iters:,} steps (~35B tokens)")
+
+    mcfg = lattice_atom_config()
+    model = build_atom_model(mcfg).to(device)
+    model.train()
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=tcfg.learning_rate,
+        betas=(tcfg.beta1, tcfg.beta2),
+        weight_decay=tcfg.weight_decay,
+        fused=tcfg.fused_optimizer and device.type == "cuda",
+    )
+
+    # Auto-resume from latest checkpoint
+    latest = find_latest_checkpoint(tcfg.checkpoint_dir)
+    start_step = 0
+    best_val_loss = float("inf")
+    elapsed_seconds = 0.0
+    if latest is not None:
+        print(f"Resuming from {latest}")
+        state = torch.load(latest, map_location=device, weights_only=False)
+        model.load_state_dict(state["model_state_dict"])
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        start_step = state.get("step", 0)
+        best_val_loss = state.get("best_val_loss", float("inf"))
+        elapsed_seconds = state.get("elapsed_minutes", 0) * 60
+
+    train_iter, val_iter = get_atom_batch_iterator(
+        data_dir=data_dir,
+        block_size=mcfg.block_size,
+        batch_size=tcfg.batch_size,
+        device=device,
+        seed=tcfg.seed,
+    )
+
+    logger = MetricsLogger(LOG_DIR / "atom")
+    last_ckpt_time = time.time()
+    run_start = time.time()
+
+    step = start_step
+    while step < tcfg.max_iters:
+        # Gradient accumulation: average loss over micro-batches
+        optimizer.zero_grad(set_to_none=True)
+        loss_accum = 0.0
+        for _ in range(tcfg.grad_accum_steps):
+            x, y = next(train_iter)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16,
+                                enabled=tcfg.use_bf16 and device.type == "cuda"):
+                out = model(x, y)
+                (out.loss / tcfg.grad_accum_steps).backward()
+            loss_accum += out.loss.item()
+        loss_accum /= tcfg.grad_accum_steps
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), tcfg.grad_clip)
+        optimizer.step()
+
+        lr = get_lr(step, tcfg)
+        for pg in optimizer.param_groups:
+            pg["lr"] = lr
+
+        step += 1
+        if step % tcfg.log_interval == 0:
+            elapsed = (time.time() - run_start + elapsed_seconds) / 60
+            print(f"step {step}/{tcfg.max_iters}  loss {loss_accum:.4f}  lr {lr:.2e}  {elapsed:.1f}min")
+
+        if step % tcfg.eval_interval == 0:
+            model.eval()
+            vlosses = []
+            with torch.no_grad():
+                for _ in range(tcfg.eval_iters):
+                    x, y = next(val_iter)
+                    with torch.autocast(device_type=device.type, dtype=torch.bfloat16,
+                                        enabled=tcfg.use_bf16 and device.type == "cuda"):
+                        vlosses.append(model(x, y).loss.item())
+            model.train()
+            vloss = sum(vlosses) / len(vlosses)
+            if vloss < best_val_loss:
+                best_val_loss = vloss
+                elapsed_min = (time.time() - run_start + elapsed_seconds) / 60
+                save_atom_checkpoint(tcfg.checkpoint_dir / "best.pt", model, optimizer,
+                                     step, best_val_loss, elapsed_min)
+                print(f"  ★ new best val loss: {vloss:.4f}")
+
+        # Time-based checkpoint (every 30 min) for Spot preemption recovery
+        now = time.time()
+        if (now - last_ckpt_time) / 60 >= tcfg.checkpoint_minutes:
+            elapsed_min = (now - run_start + elapsed_seconds) / 60
+            ckpt = tcfg.checkpoint_dir / f"ckpt_{step:06d}.pt"
+            save_atom_checkpoint(ckpt, model, optimizer, step, best_val_loss, elapsed_min)
+            last_ckpt_time = now
+
+    # Final checkpoint
+    elapsed_min = (time.time() - run_start + elapsed_seconds) / 60
+    save_atom_checkpoint(tcfg.checkpoint_dir / "final.pt", model, optimizer,
+                         step, best_val_loss, elapsed_min)
+    print(f"Done. Final → {tcfg.checkpoint_dir / 'final.pt'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train the small GPT model")
+    parser.add_argument("--atom", action="store_true",
+                        help="Train Lattice Atom (655M) instead of Mini/Air")
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to checkpoint, or 'latest'")
     parser.add_argument("--max-iters", type=int, default=None)
@@ -443,6 +590,12 @@ def main() -> None:
     parser.add_argument("--no-amp", action="store_true",
                         help="Disable CUDA mixed precision even on GPU")
     args = parser.parse_args()
+
+    if args.atom:
+        from config import AtomTrainConfig
+        tcfg = AtomTrainConfig(device_prefer=args.device)  # type: ignore[call-arg]
+        train_atom(tcfg=tcfg, max_iters_override=args.max_iters)
+        return
 
     tcfg = train_config
     if args.dataset is not None:
