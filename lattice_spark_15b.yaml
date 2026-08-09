@@ -1,0 +1,25 @@
+# Lattice Spark 1.5B — gentle identity fine-tune on Qwen2.5-1.5B
+# Key changes from the 0.5B attempt:
+#   - Bigger base model (1.5B survives fine-tuning better)
+#   - Lower LoRA rank (8 not 32) — less distortion
+#   - Fewer iters (50 not 100) — prevents overfitting
+#   - Lower LR (5e-5 not 1e-4) — gentle nudge, not a shove
+model: mlx-community/Qwen2.5-1.5B-Instruct-4bit
+
+train: true
+data: data/lattice_ft
+fine_tune_type: lora
+num_layers: 16
+batch_size: 2
+iters: 50
+learning_rate: 5e-5
+steps_per_report: 10
+steps_per_eval: 25
+adapter_path: adapters/lattice_spark_15b
+max_seq_length: 512
+
+lora_parameters:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  scale: 10.0
