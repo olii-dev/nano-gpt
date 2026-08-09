@@ -1,0 +1,21 @@
+# Lattice Spark — fine-tune Qwen2.5-0.5B on Mac with MLX LoRA
+# Mixed dataset: Lattice identity (3x weight) + general Q&A (prevents overfit)
+model: mlx-community/Qwen2.5-0.5B-Instruct-4bit
+
+train: true
+data: data/lattice_ft
+fine_tune_type: lora
+num_layers: 16
+batch_size: 4
+iters: 100
+learning_rate: 1e-4
+steps_per_report: 10
+steps_per_eval: 25
+adapter_path: adapters/lattice_spark
+max_seq_length: 512
+
+lora_parameters:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  scale: 10.0
