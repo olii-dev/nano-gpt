@@ -31,6 +31,7 @@ def _():
     TOKENIZER_SRC = REPO_DIR / "tokenizer_files"
     os.makedirs(BASE_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
+    os.environ["NANOCHAT_BASE_DIR"] = BASE_DIR  # in-process calls (get_token_bytes) need it too
 
     def run(cmd, cwd=None, env=None, log=None, timeout=None):
         p = subprocess.Popen(cmd, cwd=cwd, env=env,
