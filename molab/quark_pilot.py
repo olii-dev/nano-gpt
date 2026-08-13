@@ -40,9 +40,12 @@ def _():
         return p
 
     # ------------------------------------------------------------------ 1. GPU
-    smi = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-    if smi.returncode == 0:
-        print(smi.stdout or smi.stderr)
+    try:
+        smi = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        if smi.returncode == 0:
+            print(smi.stdout or smi.stderr)
+    except FileNotFoundError:
+        print("(nvidia-smi not on PATH - will check via torch instead)")
 
     import torch
     cuda_ok = torch.cuda.is_available()
