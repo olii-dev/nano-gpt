@@ -120,6 +120,11 @@ def _():
     tok_mod = importlib.import_module("nanochat.tokenizer")
     RustBPETokenizer = tok_mod.RustBPETokenizer
     get_token_bytes = tok_mod.get_token_bytes
+    common_mod = importlib.import_module("nanochat.common")
+    base_dir_resolved = common_mod.get_base_dir()
+    print(f"nanochat base dir: {base_dir_resolved}")
+    print(f"token_bytes.pt present there: "
+          f"{os.path.exists(os.path.join(base_dir_resolved, 'tokenizer', 'token_bytes.pt'))}")
     tok = RustBPETokenizer.from_directory(tok_dir)
     probe = "Lattice runs clean pretraining on a free Blackwell GPU!"
     ok = tok.decode(tok.encode(probe)) == probe
