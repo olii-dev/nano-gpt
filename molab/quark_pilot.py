@@ -83,6 +83,18 @@ def _():
     print("repo ^ " +
           subprocess.run(["git", "-C", str(REPO_DIR), "log", "--oneline", "-1"],
                          capture_output=True, text=True).stdout.strip())
+    have_tok = (NANOCHAT_DIR / "nanochat" / "tokenizer.py").exists()
+    have_prep = (LATTICE_DIR / "prepare_smollm_parquet.py").exists()
+    print(f"nanochat package present: {have_tok} | lattice_atom present: {have_prep}")
+    if not (have_tok and have_prep):
+        print("submodule checkout incomplete - retrying ...")
+        subprocess.run(["git", "-C", str(REPO_DIR), "submodule", "update",
+                        "--init", "--recursive"], check=True)
+        have_tok = (NANOCHAT_DIR / "nanochat" / "tokenizer.py").exists()
+        have_prep = (LATTICE_DIR / "prepare_smollm_parquet.py").exists()
+        print(f"after retry: nanochat {have_tok} | lattice_atom {have_prep}")
+        if not (have_tok and have_prep):
+            raise SystemExit("repo checkout broken - paste this message back")
 
     # ------------------------------------------------------------------ 3. deps
     import importlib.util
@@ -98,9 +110,12 @@ def _():
     for f in ("tokenizer.pkl", "token_bytes.pt"):
         if not os.path.exists(os.path.join(tok_dir, f)):
             shutil.copy(os.path.join(TOKENIZER_SRC, f), os.path.join(tok_dir, f))
-    if NANOCHAT_DIR not in sys.path:
-        sys.path.insert(0, NANOCHAT_DIR)
-    from nanochat.tokenizer import RustBPETokenizer, get_token_bytes
+    if str(NANOCHAT_DIR) not in sys.path:
+        sys.path.insert(0, str(NANOCHAT_DIR))
+    import importlib
+    tok_mod = importlib.import_module("nanochat.tokenizer")
+    RustBPETokenizer = tok_mod.RustBPETokenizer
+    get_token_bytes = tok_mod.get_token_bytes
     tok = RustBPETokenizer.from_directory(tok_dir)
     probe = "Lattice runs clean pretraining on a free Blackwell GPU!"
     ok = tok.decode(tok.encode(probe)) == probe
@@ -122,14 +137,17 @@ def _():
     print("shards:", sorted(shards))
 
     # ------------------------------------------------------------------ 6. patch
-    for p in (NANOCHAT_DIR, LATTICE_DIR):
+    # NOTE: sys.path must contain each package's PARENT dir:
+    #   nanochat.*        -> NANOCHAT_DIR
+    #   lattice_atom.*    -> REPO_DIR   (lattice_atom/ lives inside the repo root)
+    for p in (str(NANOCHAT_DIR), str(REPO_DIR)):
         if p not in sys.path:
             sys.path.insert(0, p)
     os.environ["NANOCHAT_DATA_DIR"] = DATA_DIR
-    import lattice_atom.dataset_smollm
     import importlib as _il
-    _il.reload(lattice_atom.dataset_smollm)
-    import nanochat.dataset as nds
+    patch_mod = _il.import_module("lattice_atom.dataset_smollm")
+    _il.reload(patch_mod)
+    nds = _il.import_module("nanochat.dataset")
     print(f"dataloader -> {nds.DATA_DIR} | patched: {nds.DATA_DIR == DATA_DIR}")
 
     # ------------------------------------------------------------------ 7. seed
